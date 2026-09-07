@@ -11,6 +11,10 @@ const callEvents = require("./server/call-events");
 
 const app = express();
 
+app.get("/healthz", (req, res) => {
+  res.set("Cache-Control", "no-store").type("text/plain").send("ok");
+});
+
 app.use(express.static(path.join(__dirname, "public")));
 
 app.use(
