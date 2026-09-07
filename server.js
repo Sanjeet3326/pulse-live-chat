@@ -16,8 +16,8 @@ app.get("/healthz", (req, res) => {
   res.set("Cache-Control", "no-store").type("text/plain").send("ok");
 });
 
-app.get("/ice-config", (req, res) => {
-  const { iceServers, hasTurn } = turn.getIceServers();
+app.get("/ice-config", async (req, res) => {
+  const { iceServers, hasTurn } = await turn.getIceServers();
 
   res
     .set("Cache-Control", "no-store")
@@ -70,25 +70,26 @@ io.on("connection", (socket) => {
   });
 });
 
-httpServer.listen(config.PORT, () => {
-  const ice = turn.getIceServers();
-
+httpServer.listen(config.PORT, async () => {
   console.log("");
   console.log("  Pulse is running.");
   console.log(`  Open your browser to:  http://localhost:${config.PORT}`);
   console.log("");
 
-  if (ice.mode === "ephemeral") {
-    console.log("  TURN: on, time-limited credentials (recommended)");
-  } else if (ice.mode === "static") {
-    console.log("  TURN: on, fixed credentials");
-  } else if (ice.mode === "incomplete") {
-    console.log("  TURN: OFF - TURN_URL is set but credentials are missing.");
-    console.log("        Set TURN_SECRET, or TURN_USERNAME and TURN_CREDENTIAL.");
-  } else {
-    console.log("  TURN: off - voice and screen only reach the same network.");
-    console.log("        Set TURN_URL to allow calls across networks.");
-  }
+  const ice = await turn.getIceServers();
+  const notes = {
+    api: "  TURN: on, credentials loaded from TURN_API_URL",
+    ephemeral: "  TURN: on, time-limited credentials (recommended)",
+    static: "  TURN: on, fixed credentials",
+    "api-no-turn": "  TURN: OFF - TURN_API_URL returned no turn: servers.",
+    "api-failed": "  TURN: OFF - TURN_API_URL could not be loaded (see warning above).",
+    incomplete:
+      "  TURN: OFF - TURN_URL is set but credentials are missing.\n        Set TURN_SECRET, or TURN_USERNAME and TURN_CREDENTIAL.",
+    none:
+      "  TURN: off - voice and screen only reach the same network.\n        Set TURN_API_URL or TURN_URL to allow calls across networks.",
+  };
+
+  console.log(notes[ice.mode] || notes.none);
   console.log("");
   console.log("  Press Ctrl+C here to stop the server.");
   console.log("");

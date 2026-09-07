@@ -97,7 +97,17 @@ exists. There is no reliable free public one (relaying video costs bandwidth),
 so you supply your own. The app reads it from environment variables — no code
 change:
 
-There are two ways to supply credentials. Set `TURN_URL` either way:
+**Easiest** — if your provider gives you a credentials URL, set just this one
+variable and the server fetches (and caches) the details itself:
+
+| Variable | Example |
+|---|---|
+| `TURN_API_URL` | `https://yourapp.metered.live/api/v1/turn/credentials?apiKey=…` |
+
+If that URL ever fails, the app falls back to same-network calls rather than
+breaking.
+
+Otherwise, supply the details directly. Set `TURN_URL` either way:
 
 | Variable | Example |
 |---|---|
