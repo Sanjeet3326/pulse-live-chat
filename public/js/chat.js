@@ -78,6 +78,58 @@ socket.on("system_message", (text) => {
   if (wasAtBottom) scrollToBottom();
 });
 
+socket.on("join_requests", (requests) => {
+  const panel = $("requests");
+  const list = $("requests-list");
+
+  list.innerHTML = "";
+  panel.hidden = requests.length === 0;
+
+  requests.forEach((request) => {
+    const li = document.createElement("li");
+    li.className = "request";
+
+    const avatarWrap = document.createElement("div");
+    avatarWrap.appendChild(avatarEl(request.username));
+
+    const body = document.createElement("div");
+    body.className = "request__body";
+
+    const name = document.createElement("strong");
+    name.textContent = request.username;
+
+    const sub = document.createElement("span");
+    sub.textContent = "wants to join";
+
+    body.append(name, sub);
+
+    const actions = document.createElement("div");
+    actions.className = "request__actions";
+
+    const allow = document.createElement("button");
+    allow.type = "button";
+    allow.className = "request__btn request__btn--allow";
+    allow.title = "Let " + request.username + " in";
+    allow.appendChild(iconEl("i-check"));
+    allow.addEventListener("click", () =>
+      socket.emit("approve_join", { id: request.id })
+    );
+
+    const deny = document.createElement("button");
+    deny.type = "button";
+    deny.className = "request__btn request__btn--deny";
+    deny.title = "Turn " + request.username + " away";
+    deny.appendChild(iconEl("i-remove"));
+    deny.addEventListener("click", () =>
+      socket.emit("deny_join", { id: request.id })
+    );
+
+    actions.append(allow, deny);
+    li.append(avatarWrap, body, actions);
+    list.appendChild(li);
+  });
+});
+
 socket.on("room_members", (members) => {
   renderMembers(members);
   const count = members.length;

@@ -33,6 +33,7 @@ function addColumn(table, column, definition) {
 addColumn("rooms", "password_salt", "TEXT");
 addColumn("rooms", "password_key", "TEXT");
 addColumn("rooms", "owner_key", "TEXT");
+addColumn("rooms", "needs_approval", "INTEGER NOT NULL DEFAULT 0");
 addColumn("messages", "kind", "TEXT NOT NULL DEFAULT 'text'");
 addColumn("messages", "file_url", "TEXT");
 addColumn("messages", "file_name", "TEXT");
@@ -40,12 +41,12 @@ addColumn("messages", "file_type", "TEXT");
 addColumn("messages", "file_size", "INTEGER");
 
 const insertRoom = db.prepare(
-  `INSERT INTO rooms (code, name, created_by, created_at, password_salt, password_key, owner_key)
-   VALUES (?, ?, ?, ?, ?, ?, ?)`
+  `INSERT INTO rooms (code, name, created_by, created_at, password_salt, password_key, owner_key, needs_approval)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 );
 
 const selectRoom = db.prepare(
-  `SELECT code, name, created_by, created_at, password_salt, password_key, owner_key
+  `SELECT code, name, created_by, created_at, password_salt, password_key, owner_key, needs_approval
      FROM rooms WHERE code = ?`
 );
 
@@ -62,7 +63,7 @@ const selectRecent = db.prepare(
     LIMIT ?`
 );
 
-function createRoom({ code, name, createdBy, passwordSalt, passwordKey, ownerKey }) {
+function createRoom({ code, name, createdBy, passwordSalt, passwordKey, ownerKey, needsApproval }) {
   insertRoom.run(
     code,
     name,
@@ -70,7 +71,8 @@ function createRoom({ code, name, createdBy, passwordSalt, passwordKey, ownerKey
     new Date().toISOString(),
     passwordSalt ?? null,
     passwordKey ?? null,
-    ownerKey ?? null
+    ownerKey ?? null,
+    needsApproval ? 1 : 0
   );
 }
 

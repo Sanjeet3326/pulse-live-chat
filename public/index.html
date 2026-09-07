@@ -67,6 +67,9 @@
     <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" />
     </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m5 13 4 4L19 7" />
+    </symbol>
     <symbol id="i-remove" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M18 6 6 18" /><path d="m6 6 12 12" />
     </symbol>
@@ -156,6 +159,20 @@
             <span class="field__label"><svg class="field__lock"><use href="#i-lock" /></svg> Password <span class="field__optional">optional</span></span>
             <input id="create-password-input" class="field__input" type="password" maxlength="64" placeholder="Leave blank for an open room" />
           </label>
+
+          <label class="toggle">
+            <input id="approval-input" type="checkbox" />
+            <span class="toggle__box"><svg><use href="#i-check" /></svg></span>
+            <span class="toggle__text">Ask me before letting anyone in</span>
+          </label>
+        </div>
+
+        <div class="waiting" id="waiting" hidden>
+          <span class="waiting__spinner"></span>
+          <div>
+            <strong id="waiting-title">Waiting to be let in…</strong>
+            <span id="waiting-sub">Whoever runs the room has been asked.</span>
+          </div>
         </div>
 
         <p class="card__error" id="join-error" role="alert" hidden></p>
@@ -204,6 +221,11 @@
     </header>
 
     <aside class="sidebar" id="sidebar">
+      <div class="requests" id="requests" hidden>
+        <p class="sidebar__label sidebar__label--hot">Waiting to join</p>
+        <ul class="requests__list" id="requests-list"></ul>
+      </div>
+
       <p class="sidebar__label">In this room</p>
       <ul class="members" id="member-list"></ul>
 

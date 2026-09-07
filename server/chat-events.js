@@ -6,6 +6,35 @@ const passwords = require("./passwords");
 const uploads = require("./uploads");
 const owners = require("./owners");
 
+const REQUEST_TIMEOUT_MS = 2 * 60 * 1000;
+const pending = new Map();
+
+function requestsFor(code) {
+  return Array.from(pending.values())
+    .filter((entry) => entry.code === code)
+    .map((entry) => ({ id: entry.socket.id, username: entry.username }));
+}
+
+function notifyOwners(io, code) {
+  const list = requestsFor(code);
+
+  rooms
+    .getMembers(code)
+    .filter((member) => member.isOwner)
+    .forEach((owner) => io.to(owner.id).emit("join_requests", list));
+}
+
+function dropRequest(io, id, message) {
+  const entry = pending.get(id);
+  if (!entry) return;
+
+  clearTimeout(entry.timer);
+  pending.delete(id);
+
+  if (message) entry.socket.emit("join_denied", message);
+  notifyOwners(io, entry.code);
+}
+
 function clean(value, maxLength) {
   return String(value ?? "")
     .replace(/\p{Cc}/gu, " ")
@@ -34,10 +63,12 @@ function enterRoom({ io, socket, session, username, room, isOwner, ownerToken })
   socket.emit("chat_history", database.getRecentMessages(room.code));
   socket.to(room.code).emit("system_message", `${username} joined`);
   rooms.announce(io, room.code);
+
+  if (isOwner) notifyOwners(io, room.code);
 }
 
 function register(io, socket, session) {
-  socket.on("create_room", ({ username, roomName, code, password }) => {
+  socket.on("create_room", ({ username, roomName, code, password, needsApproval }) => {
     const cleanUsername = clean(username, config.MAX_NAME_LENGTH);
     const cleanRoomName = clean(roomName, config.MAX_ROOM_NAME_LENGTH);
 
@@ -101,6 +132,7 @@ function register(io, socket, session) {
       passwordSalt: credentials?.salt,
       passwordKey: credentials?.key,
       ownerKey: owner.key,
+      needsApproval: Boolean(needsApproval),
     });
 
     enterRoom({
@@ -162,7 +194,80 @@ function register(io, socket, session) {
       }
     }
 
+    if (room.needs_approval && !owner) {
+      const ownersPresent = rooms
+        .getMembers(room.code)
+        .filter((member) => member.isOwner).length;
+
+      if (ownersPresent === 0) {
+        socket.emit(
+          "join_error",
+          `${room.name} only lets people in when whoever runs it is here to approve. Try again when they're online.`
+        );
+        return;
+      }
+
+      dropRequest(io, socket.id);
+
+      const timer = setTimeout(() => {
+        dropRequest(
+          io,
+          socket.id,
+          "Nobody answered your request in time. Try knocking again."
+        );
+      }, REQUEST_TIMEOUT_MS);
+
+      pending.set(socket.id, {
+        code: room.code,
+        username: cleanUsername,
+        socket,
+        session,
+        timer,
+      });
+
+      socket.emit("awaiting_approval", { roomName: room.name });
+      notifyOwners(io, room.code);
+      return;
+    }
+
     enterRoom({ io, socket, session, username: cleanUsername, room, isOwner: owner });
+  });
+
+  socket.on("approve_join", ({ id }) => {
+    if (!session.room || !session.isOwner) return;
+
+    const entry = pending.get(id);
+    if (!entry || entry.code !== session.room) return;
+
+    const room = database.getRoom(entry.code);
+    if (!room) return;
+
+    clearTimeout(entry.timer);
+    pending.delete(id);
+
+    enterRoom({
+      io,
+      socket: entry.socket,
+      session: entry.session,
+      username: entry.username,
+      room,
+      isOwner: false,
+    });
+
+    notifyOwners(io, session.room);
+  });
+
+  socket.on("deny_join", ({ id }) => {
+    if (!session.room || !session.isOwner) return;
+
+    const entry = pending.get(id);
+    if (!entry || entry.code !== session.room) return;
+
+    dropRequest(io, id, `${session.username} didn't let you in.`);
+  });
+
+  socket.on("disconnect", () => {
+    if (pending.has(socket.id)) dropRequest(io, socket.id);
   });
 
   socket.on("kick_member", ({ id }) => {

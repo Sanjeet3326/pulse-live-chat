@@ -21,6 +21,9 @@ const joinPasswordInput = $("join-password-input");
 const roomNameInput = $("room-name-input");
 const customCodeInput = $("custom-code-input");
 const createPasswordInput = $("create-password-input");
+const approvalInput = $("approval-input");
+const waiting = $("waiting");
+const waitingTitle = $("waiting-title");
 
 const tabJoin = $("tab-join");
 const tabCreate = $("tab-create");
@@ -148,6 +151,7 @@ joinForm.addEventListener("submit", (event) => {
       roomName,
       code: customCodeInput.value.trim(),
       password: createPasswordInput.value,
+      needsApproval: approvalInput.checked,
     });
   } else {
     const code = codeInput.value.trim();
@@ -186,6 +190,7 @@ socket.on("password_rejected", (message) => {
 });
 
 socket.on("joined", (identity) => {
+  waiting.hidden = true;
   if (identity.ownerToken) session.rememberOwnerToken(identity.code, identity.ownerToken);
   activeSession = {
     username: identity.username,
@@ -220,6 +225,20 @@ socket.on("join_error", (message) => {
   showError(message);
 });
 
+socket.on("awaiting_approval", ({ roomName }) => {
+  joinError.hidden = true;
+  waiting.hidden = false;
+  waitingTitle.textContent = `Waiting to be let into ${roomName}…`;
+  setStatus("");
+  activeSession = null;
+});
+
+socket.on("join_denied", (message) => {
+  activeSession = null;
+  session.forgetRoom();
+  showError(message);
+});
+
 socket.on("kicked", ({ roomName, by }) => {
   activeSession = null;
   session.forgetRoom();
@@ -234,6 +253,7 @@ socket.on("kicked", ({ roomName, by }) => {
 });
 
 function showError(message) {
+  waiting.hidden = true;
   joinError.textContent = message;
   joinError.hidden = false;
 }
