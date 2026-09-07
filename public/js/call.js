@@ -254,6 +254,7 @@ async function joinVoice() {
   socket.emit("call_state", { micOn: true });
   watchAudioLevel(me.id, micStream);
 
+  micBtn.classList.remove("is-nudge");
   micBtn.classList.add("is-on");
   micBtnText.textContent = "Leave voice call";
   muteBtn.hidden = false;
@@ -275,6 +276,8 @@ function leaveVoice() {
   muteBtn.classList.remove("is-on");
   muteBtnText.textContent = "Mute me";
   callNote.textContent = "";
+
+  nudgeToJoinVoice();
 }
 
 muteBtn.addEventListener("click", () => {
@@ -456,6 +459,21 @@ function playRemoteAudio(remoteId, stream) {
   audio.play().catch(() => {
     soundUnlock.hidden = false;
   });
+
+  nudgeToJoinVoice();
+}
+
+function nudgeToJoinVoice() {
+  const receiving = audioContainer.querySelectorAll("audio").length > 0;
+
+  if (micStream || !receiving) {
+    micBtn.classList.remove("is-nudge");
+    return;
+  }
+
+  micBtn.classList.add("is-nudge");
+  callNote.textContent =
+    "You can hear them, but they can't hear you — join the call to talk back.";
 }
 
 soundUnlock.addEventListener("click", () => {

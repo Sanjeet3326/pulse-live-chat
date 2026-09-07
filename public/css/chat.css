@@ -209,6 +209,17 @@
   margin-bottom: 2px;
 }
 .btn--call { justify-content: flex-start; padding: 12px 15px; font-size: 13.5px; }
+
+.btn--call.is-nudge {
+  border-color: var(--gold);
+  color: var(--gold);
+  animation: nudge 1.8s ease-in-out infinite;
+}
+
+@keyframes nudge {
+  0%, 100% { box-shadow: var(--lift-1), 0 0 0 0 rgba(255, 201, 74, 0.45); }
+  50%      { box-shadow: var(--lift-1), 0 0 0 7px rgba(255, 201, 74, 0); }
+}
 .callbox__note { font-size: 11px; line-height: 1.45; color: var(--text-faint); min-height: 16px; }
 
 .stage {
