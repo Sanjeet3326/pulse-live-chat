@@ -325,6 +325,29 @@ socket.on("lobby_stats", (rooms) => {
   });
 });
 
+const installBtn = $("install-btn");
+let installPrompt = null;
+
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  installPrompt = event;
+  installBtn.hidden = false;
+});
+
+installBtn.addEventListener("click", async () => {
+  if (!installPrompt) return;
+
+  installBtn.hidden = true;
+  installPrompt.prompt();
+  await installPrompt.userChoice;
+  installPrompt = null;
+});
+
+window.addEventListener("appinstalled", () => {
+  installPrompt = null;
+  installBtn.hidden = true;
+});
+
 $("leave-btn").addEventListener("click", () => {
   activeSession = null;
   session.forgetRoom();
