@@ -410,11 +410,15 @@ function renderMembers(members) {
     name.textContent = member.username;
     body.appendChild(name);
 
-    if (member.id === me?.id) {
-      const you = document.createElement("span");
-      you.className = "member__you";
-      you.textContent = "you";
-      body.appendChild(you);
+    const tags = [];
+    if (member.id === me?.id) tags.push("you");
+    if (member.isOwner) tags.push("owner");
+
+    if (tags.length > 0) {
+      const tag = document.createElement("span");
+      tag.className = "member__you";
+      tag.textContent = tags.join(" · ");
+      body.appendChild(tag);
     }
 
     const badges = document.createElement("div");
@@ -436,6 +440,24 @@ function renderMembers(members) {
     }
 
     li.append(avatarWrap, body, badges);
+
+    if (me?.isOwner && member.id !== me.id && !member.isOwner) {
+      const kick = document.createElement("button");
+      kick.type = "button";
+      kick.className = "member__kick";
+      kick.title = "Remove " + member.username;
+      kick.setAttribute("aria-label", "Remove " + member.username);
+      kick.appendChild(iconEl("i-remove"));
+
+      kick.addEventListener("click", () => {
+        if (confirm(`Remove ${member.username} from the room?`)) {
+          socket.emit("kick_member", { id: member.id });
+        }
+      });
+
+      li.appendChild(kick);
+    }
+
     memberListEl.appendChild(li);
   });
 }

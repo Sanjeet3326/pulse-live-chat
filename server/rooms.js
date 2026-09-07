@@ -1,6 +1,6 @@
 const rooms = new Map();
 
-function addMember(code, roomName, { id, username }) {
+function addMember(code, roomName, { id, username, isOwner }) {
   if (!rooms.has(code)) {
     rooms.set(code, { name: roomName, members: new Map() });
   }
@@ -8,6 +8,7 @@ function addMember(code, roomName, { id, username }) {
   rooms.get(code).members.set(id, {
     id,
     username,
+    isOwner: Boolean(isOwner),
     micOn: false,
     sharing: false,
   });
@@ -26,6 +27,10 @@ function updateMember(code, id, changes) {
   if (!member) return;
 
   Object.assign(member, changes);
+}
+
+function getRoomName(code) {
+  return rooms.get(code)?.name || code;
 }
 
 function getMembers(code) {
@@ -60,6 +65,7 @@ module.exports = {
   removeMember,
   updateMember,
   getMembers,
+  getRoomName,
   getActiveRooms,
   broadcastMembers,
   broadcastLobbyStats,

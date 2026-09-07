@@ -179,6 +179,25 @@
 .member__you { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); }
 
 .member__badges { display: flex; gap: 5px; }
+
+.member__kick {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .18s, background .18s, color .18s;
+}
+.member:hover .member__kick,
+.member__kick:focus-visible { opacity: 1; }
+.member__kick:hover { background: var(--hot-soft); color: var(--hot); }
+.member__kick svg { width: 14px; height: 14px; }
 .badge {
   display: grid;
   place-items: center;

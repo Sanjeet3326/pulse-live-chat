@@ -39,3 +39,11 @@ export function forgetRoom() {
   safeSet(localStorage, CODE_KEY, "");
   safeSet(sessionStorage, PASS_KEY, "");
 }
+
+export function rememberOwnerToken(code, token) {
+  safeSet(localStorage, "pulse:owner:" + code, token);
+}
+
+export function ownerTokenFor(code) {
+  return code ? safeGet(localStorage, "pulse:owner:" + code.toUpperCase()) : "";
+}

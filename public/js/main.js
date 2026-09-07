@@ -91,6 +91,7 @@ if (codeFromLink) {
       username: saved.username,
       code: saved.code,
       password: saved.password,
+      ownerToken: session.ownerTokenFor(saved.code),
     };
     setStatus("connecting", "Rejoining " + saved.code + "…");
   }
@@ -161,6 +162,7 @@ joinForm.addEventListener("submit", (event) => {
       username,
       code,
       password: passwordField.hidden ? "" : joinPasswordInput.value,
+      ownerToken: session.ownerTokenFor(code),
     };
     socket.emit("join_room", activeSession);
   }
@@ -184,10 +186,12 @@ socket.on("password_rejected", (message) => {
 });
 
 socket.on("joined", (identity) => {
+  if (identity.ownerToken) session.rememberOwnerToken(identity.code, identity.ownerToken);
   activeSession = {
     username: identity.username,
     code: identity.code,
     password: activeSession?.password || saved.password || "",
+    ownerToken: session.ownerTokenFor(identity.code),
   };
 
   session.remember(activeSession);
@@ -214,6 +218,19 @@ socket.on("join_error", (message) => {
   session.forgetRoom();
   setStatus("");
   showError(message);
+});
+
+socket.on("kicked", ({ roomName, by }) => {
+  activeSession = null;
+  session.forgetRoom();
+  setStatus("");
+
+  chatScreen.hidden = true;
+  joinScreen.hidden = false;
+  background.setCalm(1);
+  document.title = "Pulse — live rooms";
+
+  showError(`${by} removed you from ${roomName}.`);
 });
 
 function showError(message) {

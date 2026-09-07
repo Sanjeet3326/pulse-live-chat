@@ -251,6 +251,20 @@ async function joinVoice() {
 
   peers.forEach(({ pc }) => addStreamToPeer(pc, micStream));
 
+  const track = micStream.getAudioTracks()[0];
+  track.addEventListener("ended", handleMicLost);
+  track.addEventListener("mute", () => {
+    if (!isMuted) {
+      callNote.textContent =
+        "Your microphone went quiet — another app may have taken it. Games often do this.";
+    }
+  });
+  track.addEventListener("unmute", () => {
+    if (!isMuted && micStream) {
+      callNote.textContent = "You're live. Anyone else who joins can hear you.";
+    }
+  });
+
   socket.emit("call_state", { micOn: true });
   watchAudioLevel(me.id, micStream);
 
@@ -278,6 +292,28 @@ function leaveVoice() {
   callNote.textContent = "";
 
   nudgeToJoinVoice();
+}
+
+function handleMicLost() {
+  if (!micStream) return;
+
+  removeStreamFromPeers(micStream);
+  micStream.getTracks().forEach((track) => track.stop());
+  micStream = null;
+  isMuted = false;
+
+  stopWatchingAudio(me.id);
+  socket.emit("call_state", { micOn: false });
+
+  micBtn.classList.remove("is-on");
+  micBtnText.textContent = "Join voice call";
+  muteBtn.hidden = true;
+  muteBtn.classList.remove("is-on");
+  muteBtnText.textContent = "Mute me";
+
+  callNote.textContent =
+    "Another app took your microphone, so you left the call. Close it and join again.";
+  micBtn.classList.add("is-nudge");
 }
 
 muteBtn.addEventListener("click", () => {

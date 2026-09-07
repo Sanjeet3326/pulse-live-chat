@@ -4,6 +4,7 @@ const rooms = require("./rooms");
 const roomCodes = require("./room-codes");
 const passwords = require("./passwords");
 const uploads = require("./uploads");
+const owners = require("./owners");
 
 function clean(value, maxLength) {
   return String(value ?? "")
@@ -12,12 +13,13 @@ function clean(value, maxLength) {
     .slice(0, maxLength);
 }
 
-function enterRoom({ io, socket, session, username, room }) {
+function enterRoom({ io, socket, session, username, room, isOwner, ownerToken }) {
   session.username = username;
   session.room = room.code;
+  session.isOwner = Boolean(isOwner);
 
   socket.join(room.code);
-  rooms.addMember(room.code, room.name, { id: socket.id, username });
+  rooms.addMember(room.code, room.name, { id: socket.id, username, isOwner });
 
   socket.emit("joined", {
     id: socket.id,
@@ -25,6 +27,8 @@ function enterRoom({ io, socket, session, username, room }) {
     code: room.code,
     roomName: room.name,
     locked: Boolean(room.password_key),
+    isOwner: Boolean(isOwner),
+    ownerToken: ownerToken || undefined,
   });
 
   socket.emit("chat_history", database.getRecentMessages(room.code));
@@ -88,6 +92,7 @@ function register(io, socket, session) {
     }
 
     const credentials = requestedPassword ? passwords.create(requestedPassword) : null;
+    const owner = owners.createToken();
 
     database.createRoom({
       code: finalCode,
@@ -95,6 +100,7 @@ function register(io, socket, session) {
       createdBy: cleanUsername,
       passwordSalt: credentials?.salt,
       passwordKey: credentials?.key,
+      ownerKey: owner.key,
     });
 
     enterRoom({
@@ -103,10 +109,12 @@ function register(io, socket, session) {
       session,
       username: cleanUsername,
       room: database.getRoom(finalCode),
+      isOwner: true,
+      ownerToken: owner.token,
     });
   });
 
-  socket.on("join_room", ({ username, code, password }) => {
+  socket.on("join_room", ({ username, code, password, ownerToken }) => {
     const cleanUsername = clean(username, config.MAX_NAME_LENGTH);
     const cleanCode = roomCodes.normalise(code);
 
@@ -130,7 +138,17 @@ function register(io, socket, session) {
       return;
     }
 
-    if (room.password_key) {
+    const owner = owners.isOwner(ownerToken, room.owner_key);
+
+    if (!owner && owners.isBlocked(room.code, cleanUsername)) {
+      socket.emit(
+        "join_error",
+        "You were removed from this room. You can try again later, or ask whoever runs it to let you back in."
+      );
+      return;
+    }
+
+    if (room.password_key && !owner) {
       const attempt = typeof password === "string" ? password : "";
 
       if (!attempt) {
@@ -144,7 +162,31 @@ function register(io, socket, session) {
       }
     }
 
-    enterRoom({ io, socket, session, username: cleanUsername, room });
+    enterRoom({ io, socket, session, username: cleanUsername, room, isOwner: owner });
+  });
+
+  socket.on("kick_member", ({ id }) => {
+    if (!session.room || !session.isOwner || !id || id === socket.id) return;
+
+    const target = rooms.getMembers(session.room).find((m) => m.id === id);
+    if (!target || target.isOwner) return;
+
+    owners.block(session.room, target.username);
+
+    io.to(id).emit("kicked", {
+      roomName: rooms.getRoomName(session.room),
+      by: session.username,
+    });
+
+    const targetSocket = io.sockets.sockets.get(id);
+    if (targetSocket) targetSocket.leave(session.room);
+
+    rooms.removeMember(session.room, id);
+    socket
+      .to(session.room)
+      .emit("system_message", `${target.username} was removed by ${session.username}`);
+    socket.to(session.room).emit("screen_share_stopped", id);
+    rooms.announce(io, session.room);
   });
 
   socket.on("send_message", ({ text }) => {
