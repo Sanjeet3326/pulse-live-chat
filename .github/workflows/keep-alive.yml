@@ -1,0 +1,32 @@
+name: Keep the app awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the health endpoint
+        run: |
+          URL="https://pulse-live-chat.onrender.com/healthz"
+
+          for attempt in 1 2 3; do
+            echo "Attempt $attempt..."
+            start=$(date +%s)
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 "$URL" || echo "000")
+            elapsed=$(( $(date +%s) - start ))
+
+            if [ "$code" = "200" ]; then
+              echo "OK - responded 200 in ${elapsed}s"
+              exit 0
+            fi
+
+            echo "Got '$code' after ${elapsed}s"
+            sleep 15
+          done
+
+          echo "The app did not respond after 3 attempts."
+          exit 1
