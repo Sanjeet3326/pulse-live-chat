@@ -37,6 +37,7 @@ export function start(identity) {
   lastStamp = 0;
   updateCharCount();
   updatePlaceholder();
+  flushPendingMessages();
 }
 
 socket.on("chat_history", (history) => {
@@ -113,17 +114,32 @@ input.addEventListener("input", () => {
   signalTyping();
 });
 
+const pendingMessages = [];
+
 function sendMessage() {
   const text = input.value.trim();
   if (!text) return;
 
-  socket.emit("send_message", { text });
+  if (socket.connected && me) {
+    socket.emit("send_message", { text });
+  } else {
+    pendingMessages.push(text);
+    showUploadStatus("Offline — this will send when you reconnect.");
+  }
 
   input.value = "";
   autoGrow();
   updateCharCount();
   stopTyping();
   input.focus();
+}
+
+function flushPendingMessages() {
+  if (pendingMessages.length === 0) return;
+
+  const queued = pendingMessages.splice(0, pendingMessages.length);
+  queued.forEach((text) => socket.emit("send_message", { text }));
+  showUploadStatus("");
 }
 
 let typingSentAt = 0;

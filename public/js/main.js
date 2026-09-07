@@ -140,6 +140,8 @@ joinForm.addEventListener("submit", (event) => {
       return;
     }
 
+    activeSession = { username, code: "", password: createPasswordInput.value };
+
     socket.emit("create_room", {
       username,
       roomName,
