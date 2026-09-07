@@ -324,7 +324,7 @@ async function recoverMic() {
   callNote.textContent =
     "Something took your microphone — trying to get it back. Games often do this.";
 
-  for (let attempt = 0; attempt < 24; attempt++) {
+  for (let attempt = 0; attempt < 720; attempt++) {
     if (!micStream) break;
 
     try {
@@ -343,7 +343,12 @@ async function recoverMic() {
       fresh.getTracks().forEach((t) => t.stop());
     } catch {}
 
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    if (attempt === 5 && micStream) {
+      callNote.textContent =
+        "Another app is holding your microphone. They'll hear you again the moment it lets go.";
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, attempt < 12 ? 5000 : 15000));
   }
 
   recovering = false;
