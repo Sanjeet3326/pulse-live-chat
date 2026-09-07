@@ -85,6 +85,8 @@ socket.on("room_members", (members) => {
 
   const presentIds = new Set();
 
+  roomMembers = members;
+
   members.forEach((member) => {
     names.set(member.id, member.username);
     presentIds.add(member.id);
@@ -128,7 +130,7 @@ function ensurePeer(remoteId) {
   };
 
   if (micStream) addStreamToPeer(pc, micStream);
-  if (screenStream) addStreamToPeer(pc, screenStream);
+  if (screenStream && screenViewers.has(remoteId)) addStreamToPeer(pc, screenStream);
 
   pc.onnegotiationneeded = async () => {
     try {
@@ -411,11 +413,105 @@ muteBtn.addEventListener("click", () => {
     : "You're live. Anyone else who joins can hear you.";
 });
 
-screenBtn.addEventListener("click", () =>
-  screenStream ? stopSharing() : startSharing()
-);
+const shareSheet = $("share-sheet");
+const sharePeople = $("share-people");
+const screenViewers = new Set();
+let roomMembers = [];
 
-async function startSharing() {
+export function isSharing() {
+  return Boolean(screenStream);
+}
+
+export function isViewer(id) {
+  return screenViewers.has(id);
+}
+
+export function toggleViewer(id) {
+  if (!screenStream || id === me?.id) return;
+
+  const peer = peers.get(id);
+
+  if (screenViewers.has(id)) {
+    screenViewers.delete(id);
+    if (peer) {
+      peer.pc.getSenders().forEach((sender) => {
+        if (sender.track && screenStream.getTracks().includes(sender.track)) {
+          peer.pc.removeTrack(sender);
+        }
+      });
+    }
+    socket.emit("screen_access", { to: id, allowed: false });
+  } else {
+    screenViewers.add(id);
+    if (peer) addStreamToPeer(peer.pc, screenStream);
+  }
+
+  document.dispatchEvent(new CustomEvent("pulse:viewers-changed"));
+}
+
+screenBtn.addEventListener("click", () => {
+  if (screenStream) {
+    stopSharing();
+    return;
+  }
+
+  const others = roomMembers.filter((m) => m.id !== me?.id);
+
+  if (others.length === 0) {
+    beginSharing(new Set());
+    return;
+  }
+
+  openSharePicker(others);
+});
+
+function openSharePicker(others) {
+  sharePeople.innerHTML = "";
+
+  others.forEach((member) => {
+    const li = document.createElement("li");
+
+    const label = document.createElement("label");
+    label.className = "toggle";
+
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = true;
+    box.value = member.id;
+
+    const mark = document.createElement("span");
+    mark.className = "toggle__box";
+    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("href", "#i-check");
+    icon.appendChild(use);
+    mark.appendChild(icon);
+
+    const text = document.createElement("span");
+    text.className = "toggle__text";
+    text.textContent = member.username;
+
+    label.append(box, mark, text);
+    li.appendChild(label);
+    sharePeople.appendChild(li);
+  });
+
+  shareSheet.hidden = false;
+}
+
+$("share-cancel").addEventListener("click", () => {
+  shareSheet.hidden = true;
+});
+
+$("share-start").addEventListener("click", () => {
+  const chosen = new Set(
+    Array.from(sharePeople.querySelectorAll("input:checked")).map((i) => i.value)
+  );
+  shareSheet.hidden = true;
+  beginSharing(chosen);
+});
+
+async function beginSharing(chosen) {
   try {
     screenStream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: 15 },
@@ -425,8 +521,15 @@ async function startSharing() {
     return;
   }
 
-  peers.forEach(({ pc }) => addStreamToPeer(pc, screenStream));
+  screenViewers.clear();
+  chosen.forEach((id) => screenViewers.add(id));
+
+  peers.forEach(({ pc }, id) => {
+    if (screenViewers.has(id)) addStreamToPeer(pc, screenStream);
+  });
+
   socket.emit("call_state", { sharing: true });
+  document.dispatchEvent(new CustomEvent("pulse:viewers-changed"));
 
   showTile(me.id, screenStream, "You", true);
 
@@ -443,8 +546,10 @@ function stopSharing() {
   screenStream.getTracks().forEach((track) => track.stop());
   screenStream = null;
 
+  screenViewers.clear();
   socket.emit("call_state", { sharing: false });
   removeTile(me.id);
+  document.dispatchEvent(new CustomEvent("pulse:viewers-changed"));
 
   screenBtn.classList.remove("is-on");
   screenBtnText.textContent = "Share my screen";

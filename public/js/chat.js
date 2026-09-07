@@ -1,4 +1,5 @@
 import { socket } from "./socket.js";
+import * as call from "./call.js";
 import {
   $,
   avatarEl,
@@ -130,7 +131,10 @@ socket.on("join_requests", (requests) => {
   });
 });
 
+let lastMembers = [];
+
 socket.on("room_members", (members) => {
+  lastMembers = members;
   renderMembers(members);
   const count = members.length;
   $("online-count").textContent = count === 1 ? "1 here" : `${count} here`;
@@ -483,7 +487,10 @@ function renderMembers(members) {
       badge.appendChild(iconEl("i-mic"));
       badges.appendChild(badge);
     }
-    if (member.sharing) {
+    const canSeeTheirScreen =
+      member.id === me?.id || Boolean(document.getElementById("tile-" + member.id));
+
+    if (member.sharing && canSeeTheirScreen) {
       const badge = document.createElement("span");
       badge.className = "badge badge--screen";
       badge.title = "Sharing their screen";
@@ -492,6 +499,21 @@ function renderMembers(members) {
     }
 
     li.append(avatarWrap, body, badges);
+
+    if (call.isSharing() && member.id !== me?.id) {
+      const allowed = call.isViewer(member.id);
+
+      const eye = document.createElement("button");
+      eye.type = "button";
+      eye.className = "member__eye" + (allowed ? " is-on" : "");
+      eye.title = allowed
+        ? `${member.username} can see your screen — click to stop`
+        : `Let ${member.username} see your screen`;
+      eye.appendChild(iconEl(allowed ? "i-eye" : "i-eye-off"));
+
+      eye.addEventListener("click", () => call.toggleViewer(member.id));
+      li.appendChild(eye);
+    }
 
     if (me?.isOwner && member.id !== me.id && !member.isOwner) {
       const kick = document.createElement("button");
@@ -596,3 +618,5 @@ function updateCharCount() {
   charCount.textContent = `${used}/${MAX_LENGTH}`;
   charCount.classList.toggle("is-near", used > MAX_LENGTH * 0.85);
 }
+
+document.addEventListener("pulse:viewers-changed", () => renderMembers(lastMembers));
