@@ -87,6 +87,30 @@ screen over an insecure connection. That means:
 | `http://192.168.1.5:3000` (your WiFi) | works | blocked by the browser |
 | `https://your-app.onrender.com` | works | **works** |
 
+**Across different networks it needs a TURN relay.** Two people on the same
+WiFi can find a direct path, so voice and screen sharing just work. Two people
+on *different* networks are usually both behind NAT, and a direct path often
+can't be formed at all — you'll get text but silence and a blank screen.
+
+Fixing that needs a TURN server, which relays the media when no direct path
+exists. There is no reliable free public one (relaying video costs bandwidth),
+so you supply your own. The app reads it from environment variables — no code
+change:
+
+| Variable | Example |
+|---|---|
+| `TURN_URL` | `turn:your.turnserver.com:3478` (comma-separate several) |
+| `TURN_USERNAME` | your username |
+| `TURN_CREDENTIAL` | your password |
+
+On Render: your service → **Environment** → **Add Environment Variable** → save,
+and it redeploys. Providers with free or cheap tiers include
+[metered.ca](https://www.metered.ca/stun-turn), Cloudflare Calls and Twilio, or
+you can self-host [coturn](https://github.com/coturn/coturn) on any VPS.
+
+Without TURN the app still works — it just tells people plainly that voice and
+screen are limited to the same network, instead of silently failing.
+
 **It's built for small rooms.** Everyone connects directly to everyone else,
 which is ideal for 2–6 people. Beyond that each device has to send its audio
 separately to every other person, and it gets heavy. That's a real limit of this

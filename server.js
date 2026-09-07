@@ -15,6 +15,26 @@ app.get("/healthz", (req, res) => {
   res.set("Cache-Control", "no-store").type("text/plain").send("ok");
 });
 
+app.get("/ice-config", (req, res) => {
+  const iceServers = [
+    { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
+  ];
+
+  const hasTurn = Boolean(process.env.TURN_URL);
+
+  if (hasTurn) {
+    iceServers.push({
+      urls: process.env.TURN_URL.split(",").map((u) => u.trim()),
+      username: process.env.TURN_USERNAME,
+      credential: process.env.TURN_CREDENTIAL,
+    });
+  }
+
+  res
+    .set("Cache-Control", "no-store")
+    .json({ iceServers, iceCandidatePoolSize: 4, hasTurn });
+});
+
 app.use(express.static(path.join(__dirname, "public")));
 
 app.use(
@@ -31,6 +51,12 @@ const httpServer = http.createServer(app);
 
 const io = new Server(httpServer, {
   maxHttpBufferSize: config.MAX_FILE_BYTES + 1024 * 1024,
+  pingInterval: 25000,
+  pingTimeout: 60000,
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 2 * 60 * 1000,
+    skipMiddlewares: true,
+  },
 });
 
 io.on("connection", (socket) => {

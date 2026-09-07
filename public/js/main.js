@@ -2,6 +2,7 @@ import { socket } from "./socket.js";
 import { $ } from "./ui.js";
 import * as chat from "./chat.js";
 import * as call from "./call.js";
+import * as session from "./session.js";
 import { startBackground } from "./background.js";
 import { initTilt } from "./tilt.js";
 
@@ -58,15 +59,63 @@ function setMode(next) {
 tabJoin.addEventListener("click", () => setMode("join"));
 tabCreate.addEventListener("click", () => setMode("create"));
 
-usernameInput.value = localStorage.getItem("pulse:name") || "";
+const netStatus = $("net-status");
+const netStatusText = $("net-status-text");
+
+function setStatus(state, text) {
+  if (!state) {
+    netStatus.hidden = true;
+    return;
+  }
+  netStatus.hidden = false;
+  netStatus.className = "net-status net-status--" + state;
+  netStatusText.textContent = text;
+}
+
+let activeSession = null;
+
+const saved = session.recall();
+usernameInput.value = saved.username;
 
 const codeFromLink = new URLSearchParams(location.search).get("code");
+
 if (codeFromLink) {
   codeInput.value = codeFromLink.toUpperCase();
   setMode("join");
+} else if (saved.code) {
+  codeInput.value = saved.code;
+  setMode("join");
+
+  if (saved.username) {
+    activeSession = {
+      username: saved.username,
+      code: saved.code,
+      password: saved.password,
+    };
+    setStatus("connecting", "Rejoining " + saved.code + "…");
+  }
 }
 
 usernameInput.focus();
+
+socket.on("connect", () => {
+  if (activeSession) {
+    setStatus("connecting", "Rejoining…");
+    socket.emit("join_room", activeSession);
+  } else {
+    setStatus("");
+  }
+});
+
+socket.on("disconnect", (reason) => {
+  if (reason === "io client disconnect") return;
+  setStatus("offline", "Connection lost — reconnecting…");
+});
+
+socket.io.on("reconnect_attempt", (attempt) => {
+  setStatus("connecting", `Reconnecting… (attempt ${attempt})`);
+});
+
 
 joinForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -79,7 +128,7 @@ joinForm.addEventListener("submit", (event) => {
     return;
   }
 
-  localStorage.setItem("pulse:name", username);
+  session.rememberName(username);
   joinError.hidden = true;
 
   if (mode === "create") {
@@ -106,21 +155,26 @@ joinForm.addEventListener("submit", (event) => {
       return;
     }
 
-    socket.emit("join_room", {
+    activeSession = {
       username,
       code,
       password: passwordField.hidden ? "" : joinPasswordInput.value,
-    });
+    };
+    socket.emit("join_room", activeSession);
   }
 });
 
 socket.on("password_required", ({ roomName }) => {
+  activeSession = null;
+  setStatus("");
   passwordField.hidden = false;
   joinPasswordInput.focus();
   showError(`${roomName} is locked. Enter the room password to get in.`);
 });
 
 socket.on("password_rejected", (message) => {
+  activeSession = null;
+  setStatus("");
   passwordField.hidden = false;
   joinPasswordInput.value = "";
   joinPasswordInput.focus();
@@ -128,6 +182,15 @@ socket.on("password_rejected", (message) => {
 });
 
 socket.on("joined", (identity) => {
+  activeSession = {
+    username: identity.username,
+    code: identity.code,
+    password: activeSession?.password || saved.password || "",
+  };
+
+  session.remember(activeSession);
+  setStatus("");
+
   chat.start(identity);
   call.start(identity);
 
@@ -144,7 +207,12 @@ socket.on("joined", (identity) => {
   $("message-input").focus();
 });
 
-socket.on("join_error", showError);
+socket.on("join_error", (message) => {
+  activeSession = null;
+  session.forgetRoom();
+  setStatus("");
+  showError(message);
+});
 
 function showError(message) {
   joinError.textContent = message;
@@ -218,7 +286,11 @@ socket.on("lobby_stats", (rooms) => {
   });
 });
 
-$("leave-btn").addEventListener("click", () => location.reload());
+$("leave-btn").addEventListener("click", () => {
+  activeSession = null;
+  session.forgetRoom();
+  location.href = location.origin;
+});
 
 const sidebar = $("sidebar");
 

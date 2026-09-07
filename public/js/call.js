@@ -25,16 +25,38 @@ let micStream = null;
 let screenStream = null;
 let isMuted = false;
 
-const RTC_CONFIG = {
+let rtcConfig = {
   iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
+    { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
   ],
+  iceCandidatePoolSize: 4,
 };
 
+let hasTurn = false;
+
+fetch("/ice-config")
+  .then((res) => res.json())
+  .then((config) => {
+    if (config?.iceServers?.length) {
+      rtcConfig = { iceServers: config.iceServers, iceCandidatePoolSize: 4 };
+      hasTurn = Boolean(config.hasTurn);
+    }
+  })
+  .catch(() => {});
+
 export function start(identity) {
+  const isRejoin = me && me.id !== identity.id;
   me = identity;
+
+  if (isRejoin) {
+    for (const id of Array.from(peers.keys())) closePeer(id);
+  }
+
   checkBrowserSupport();
+}
+
+function setCallNote(text) {
+  if (text || !micStream) callNote.textContent = text;
 }
 
 function checkBrowserSupport() {
@@ -72,9 +94,30 @@ function ensurePeer(remoteId) {
   const existing = peers.get(remoteId);
   if (existing) return existing;
 
-  const pc = new RTCPeerConnection(RTC_CONFIG);
-  const peer = { pc, makingOffer: false, ignoreOffer: false };
+  const pc = new RTCPeerConnection(rtcConfig);
+  const peer = { pc, makingOffer: false, ignoreOffer: false, restarts: 0 };
   peers.set(remoteId, peer);
+
+  pc.oniceconnectionstatechange = () => {
+    const state = pc.iceConnectionState;
+
+    if (state === "failed" && peer.restarts < 2) {
+      peer.restarts++;
+      try {
+        pc.restartIce();
+      } catch {}
+      setCallNote("Reconnecting media…");
+    } else if (state === "failed") {
+      setCallNote(
+        hasTurn
+          ? "Couldn't open a media connection to someone here. Text and files still work."
+          : "Voice and screen only reach people on the same network. Crossing networks needs a TURN relay — see the README. Text and files work everywhere."
+      );
+    } else if (state === "connected" || state === "completed") {
+      peer.restarts = 0;
+      setCallNote("");
+    }
+  };
 
   if (micStream) addStreamToPeer(pc, micStream);
   if (screenStream) addStreamToPeer(pc, screenStream);
