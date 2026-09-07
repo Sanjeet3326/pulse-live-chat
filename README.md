@@ -97,11 +97,32 @@ exists. There is no reliable free public one (relaying video costs bandwidth),
 so you supply your own. The app reads it from environment variables — no code
 change:
 
+There are two ways to supply credentials. Set `TURN_URL` either way:
+
 | Variable | Example |
 |---|---|
 | `TURN_URL` | `turn:your.turnserver.com:3478` (comma-separate several) |
+
+**Fixed credentials** — what most hosted providers give you:
+
+| Variable | Example |
+|---|---|
 | `TURN_USERNAME` | your username |
 | `TURN_CREDENTIAL` | your password |
+
+**Time-limited credentials** — better, if your provider or your own coturn
+supports a shared secret. The server mints a fresh username and HMAC that
+expire after an hour, and the secret itself never reaches the browser:
+
+| Variable | Example |
+|---|---|
+| `TURN_SECRET` | the shared secret from your TURN server |
+
+Fixed credentials are handed to every visitor's browser, so anyone who opens
+the site can read them and spend your bandwidth. Time-limited credentials
+avoid that, which is why they're worth preferring.
+
+The startup log tells you which mode is active, so check it after deploying.
 
 On Render: your service → **Environment** → **Add Environment Variable** → save,
 and it redeploys. Providers with free or cheap tiers include

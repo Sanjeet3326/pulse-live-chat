@@ -6,6 +6,7 @@ const { Server } = require("socket.io");
 const config = require("./server/config");
 const rooms = require("./server/rooms");
 const uploads = require("./server/uploads");
+const turn = require("./server/turn");
 const chatEvents = require("./server/chat-events");
 const callEvents = require("./server/call-events");
 
@@ -16,19 +17,7 @@ app.get("/healthz", (req, res) => {
 });
 
 app.get("/ice-config", (req, res) => {
-  const iceServers = [
-    { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
-  ];
-
-  const hasTurn = Boolean(process.env.TURN_URL);
-
-  if (hasTurn) {
-    iceServers.push({
-      urls: process.env.TURN_URL.split(",").map((u) => u.trim()),
-      username: process.env.TURN_USERNAME,
-      credential: process.env.TURN_CREDENTIAL,
-    });
-  }
+  const { iceServers, hasTurn } = turn.getIceServers();
 
   res
     .set("Cache-Control", "no-store")
@@ -82,9 +71,24 @@ io.on("connection", (socket) => {
 });
 
 httpServer.listen(config.PORT, () => {
+  const ice = turn.getIceServers();
+
   console.log("");
   console.log("  Pulse is running.");
   console.log(`  Open your browser to:  http://localhost:${config.PORT}`);
+  console.log("");
+
+  if (ice.mode === "ephemeral") {
+    console.log("  TURN: on, time-limited credentials (recommended)");
+  } else if (ice.mode === "static") {
+    console.log("  TURN: on, fixed credentials");
+  } else if (ice.mode === "incomplete") {
+    console.log("  TURN: OFF - TURN_URL is set but credentials are missing.");
+    console.log("        Set TURN_SECRET, or TURN_USERNAME and TURN_CREDENTIAL.");
+  } else {
+    console.log("  TURN: off - voice and screen only reach the same network.");
+    console.log("        Set TURN_URL to allow calls across networks.");
+  }
   console.log("");
   console.log("  Press Ctrl+C here to stop the server.");
   console.log("");
