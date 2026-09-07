@@ -41,8 +41,15 @@ fetch("/ice-config")
       rtcConfig = { iceServers: config.iceServers, iceCandidatePoolSize: 4 };
       hasTurn = Boolean(config.hasTurn);
     }
+    showReachNote();
   })
   .catch(() => {});
+
+function showReachNote() {
+  if (hasTurn || !navigator.mediaDevices?.getUserMedia) return;
+  if (micStream || screenStream) return;
+  callNote.textContent = "Best with people on the same WiFi.";
+}
 
 export function start(identity) {
   const isRejoin = me && me.id !== identity.id;
@@ -53,6 +60,7 @@ export function start(identity) {
   }
 
   checkBrowserSupport();
+  showReachNote();
 }
 
 function setCallNote(text) {
@@ -110,8 +118,8 @@ function ensurePeer(remoteId) {
     } else if (state === "failed") {
       setCallNote(
         hasTurn
-          ? "Couldn't open a media connection to someone here. Text and files still work."
-          : "Voice and screen only reach people on the same network. Crossing networks needs a TURN relay — see the README. Text and files work everywhere."
+          ? "Couldn't reach someone here for voice or screen. Chat still works."
+          : "Couldn't connect voice or screen to someone on a different network. Chat, files and screen still work for anyone on your WiFi."
       );
     } else if (state === "connected" || state === "completed") {
       peer.restarts = 0;
