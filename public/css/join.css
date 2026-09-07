@@ -407,3 +407,13 @@
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 820px) {
+  .join { padding-bottom: env(safe-area-inset-bottom); }
+  .join__pitch { padding-top: max(28px, env(safe-area-inset-top)); }
+  .field__input { font-size: 16px; }
+  .card { border-radius: 26px; }
+  .tab { padding: 13px 8px; }
+  .pitch__headline { font-size: clamp(34px, 11vw, 52px); }
+  .pitch__sub { font-size: 15px; }
+}

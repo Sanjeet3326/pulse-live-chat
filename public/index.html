@@ -238,6 +238,8 @@
       </div>
     </header>
 
+    <div class="sidebar-veil" id="sidebar-veil" hidden></div>
+
     <aside class="sidebar" id="sidebar">
       <div class="requests" id="requests" hidden>
         <p class="sidebar__label sidebar__label--hot">Waiting to join</p>
@@ -287,6 +289,18 @@
 
       <p class="typing" id="typing-indicator"></p>
       <p class="upload-status" id="upload-status"></p>
+
+      <div class="quickbar" id="quickbar">
+        <button class="quickbar__btn" id="q-mic" type="button">
+          <svg><use href="#i-mic" /></svg><span id="q-mic-text">Voice</span>
+        </button>
+        <button class="quickbar__btn" id="q-screen" type="button">
+          <svg><use href="#i-screen" /></svg><span id="q-screen-text">Share</span>
+        </button>
+        <button class="quickbar__btn" id="q-people" type="button">
+          <svg><use href="#i-users" /></svg><span>People</span>
+        </button>
+      </div>
 
       <form class="composer" id="composer" autocomplete="off">
         <button class="composer__attach" id="attach-btn" type="button" aria-label="Attach a file" title="Attach a file">

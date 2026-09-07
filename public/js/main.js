@@ -325,6 +325,48 @@ socket.on("lobby_stats", (rooms) => {
   });
 });
 
+const quickMic = $("q-mic");
+const quickScreen = $("q-screen");
+const micBtn = $("mic-btn");
+const screenBtn = $("screen-btn");
+
+quickMic.addEventListener("click", () => micBtn.click());
+quickScreen.addEventListener("click", () => screenBtn.click());
+$("q-people").addEventListener("click", (event) => {
+  event.stopPropagation();
+  openSidebar();
+});
+
+function mirror(source, target, label) {
+  const sync = () => {
+    target.classList.toggle("is-on", source.classList.contains("is-on"));
+    target.classList.toggle("is-nudge", source.classList.contains("is-nudge"));
+    if (label) {
+      label.textContent = source.classList.contains("is-on")
+        ? label.dataset.on
+        : label.dataset.off;
+    }
+  };
+
+  new MutationObserver(sync).observe(source, {
+    attributes: true,
+    attributeFilter: ["class"],
+  });
+
+  sync();
+}
+
+const quickMicText = $("q-mic-text");
+quickMicText.dataset.off = "Voice";
+quickMicText.dataset.on = "Leave";
+
+const quickScreenText = $("q-screen-text");
+quickScreenText.dataset.off = "Share";
+quickScreenText.dataset.on = "Stop";
+
+mirror(micBtn, quickMic, quickMicText);
+mirror(screenBtn, quickScreen, quickScreenText);
+
 const installBtn = $("install-btn");
 let installPrompt = null;
 
@@ -355,12 +397,30 @@ $("leave-btn").addEventListener("click", () => {
 });
 
 const sidebar = $("sidebar");
+const sidebarVeil = $("sidebar-veil");
+
+function openSidebar() {
+  sidebar.classList.add("is-open");
+  sidebarVeil.hidden = false;
+}
+
+function closeSidebar() {
+  sidebar.classList.remove("is-open");
+  sidebarVeil.hidden = true;
+}
 
 $("sidebar-toggle").addEventListener("click", (event) => {
   event.stopPropagation();
-  sidebar.classList.toggle("is-open");
+  if (sidebar.classList.contains("is-open")) closeSidebar();
+  else openSidebar();
+});
+
+sidebarVeil.addEventListener("click", closeSidebar);
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeSidebar();
 });
 
 document.addEventListener("click", (event) => {
-  if (!sidebar.contains(event.target)) sidebar.classList.remove("is-open");
+  if (!sidebar.contains(event.target)) closeSidebar();
 });

@@ -187,7 +187,8 @@ export function startBackground(canvas) {
   const uMouse = gl.getUniformLocation(program, "uMouse");
   const uCalm = gl.getUniformLocation(program, "uCalm");
 
-  const RESOLUTION_SCALE = 0.6;
+  const isSmallScreen = window.matchMedia("(max-width: 820px)").matches;
+  const RESOLUTION_SCALE = isSmallScreen ? 0.38 : 0.6;
 
   function resize() {
     const width = Math.floor(window.innerWidth * RESOLUTION_SCALE);
