@@ -156,7 +156,15 @@ function ensurePeer(remoteId) {
 
     if (event.track.kind === "audio") {
       playRemoteAudio(remoteId, stream);
-      watchAudioLevel(remoteId, stream);
+
+      considerForSpeaking(remoteId, stream);
+      stream.addEventListener("addtrack", () =>
+        considerForSpeaking(remoteId, stream)
+      );
+
+      event.track.addEventListener("ended", () =>
+        document.getElementById("audio-" + stream.id)?.remove()
+      );
     } else {
       showTile(remoteId, stream, names.get(remoteId) || "Someone");
       event.track.addEventListener("ended", () => removeTile(remoteId));
@@ -174,7 +182,9 @@ function closePeer(remoteId) {
     peers.delete(remoteId);
   }
 
-  document.getElementById("audio-" + remoteId)?.remove();
+  audioContainer
+    .querySelectorAll(`audio[data-peer="${remoteId}"]`)
+    .forEach((el) => el.remove());
   stopWatchingAudio(remoteId);
   removeTile(remoteId);
   names.delete(remoteId);
@@ -515,10 +525,20 @@ async function beginSharing(chosen) {
   try {
     screenStream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: 15 },
-      audio: false,
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      },
     });
   } catch (err) {
     return;
+  }
+
+  if (screenStream.getAudioTracks().length === 0) {
+    setCallNote(
+      "Sharing without sound. To include it, tick “Share tab audio” or “Share system audio” in the picker."
+    );
   }
 
   screenViewers.clear();
@@ -614,6 +634,9 @@ function showTile(id, stream, label, isLocal = false) {
 
 function removeTile(id) {
   document.getElementById("tile-" + id)?.remove();
+  audioContainer
+    .querySelectorAll(`audio[data-peer="${id}"][data-kind="screen"]`)
+    .forEach((el) => el.remove());
   updateStageLayout();
 }
 
@@ -667,13 +690,25 @@ stageFullscreen.addEventListener("click", () => {
   if (focused) requestFullscreen(focused);
 });
 
+function considerForSpeaking(remoteId, stream) {
+  if (stream.getVideoTracks().length > 0) {
+    stopWatchingAudio(remoteId);
+    document.getElementById("audio-" + stream.id)?.setAttribute("data-kind", "screen");
+    return;
+  }
+
+  watchAudioLevel(remoteId, stream);
+}
+
 function playRemoteAudio(remoteId, stream) {
-  let audio = document.getElementById("audio-" + remoteId);
+  let audio = document.getElementById("audio-" + stream.id);
 
   if (!audio) {
     audio = document.createElement("audio");
-    audio.id = "audio-" + remoteId;
+    audio.id = "audio-" + stream.id;
     audio.autoplay = true;
+    audio.dataset.peer = remoteId;
+    audio.dataset.kind = stream.getVideoTracks().length > 0 ? "screen" : "mic";
     audioContainer.appendChild(audio);
   }
 
@@ -687,7 +722,8 @@ function playRemoteAudio(remoteId, stream) {
 }
 
 function nudgeToJoinVoice() {
-  const receiving = audioContainer.querySelectorAll("audio").length > 0;
+  const receiving =
+    audioContainer.querySelectorAll('audio[data-kind="mic"]').length > 0;
 
   if (micStream || !receiving) {
     micBtn.classList.remove("is-nudge");
