@@ -235,13 +235,7 @@ micBtn.addEventListener("click", () => (micStream ? leaveVoice() : joinVoice()))
 
 async function joinVoice() {
   try {
-    micStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    });
+    micStream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
   } catch (err) {
     callNote.textContent =
       "Couldn't use your microphone. Check that you allowed access, and that no other app is holding it.";
@@ -251,19 +245,7 @@ async function joinVoice() {
 
   peers.forEach(({ pc }) => addStreamToPeer(pc, micStream));
 
-  const track = micStream.getAudioTracks()[0];
-  track.addEventListener("ended", handleMicLost);
-  track.addEventListener("mute", () => {
-    if (!isMuted) {
-      callNote.textContent =
-        "Your microphone went quiet — another app may have taken it. Games often do this.";
-    }
-  });
-  track.addEventListener("unmute", () => {
-    if (!isMuted && micStream) {
-      callNote.textContent = "You're live. Anyone else who joins can hear you.";
-    }
-  });
+  watchMicTrack(micStream.getAudioTracks()[0]);
 
   socket.emit("call_state", { micOn: true });
   watchAudioLevel(me.id, micStream);
@@ -276,6 +258,9 @@ async function joinVoice() {
 }
 
 function leaveVoice() {
+  clearTimeout(muteTimer);
+  recovering = false;
+
   removeStreamFromPeers(micStream);
   micStream.getTracks().forEach((track) => track.stop());
   micStream = null;
@@ -294,8 +279,100 @@ function leaveVoice() {
   nudgeToJoinVoice();
 }
 
+const MIC_CONSTRAINTS = {
+  audio: {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  },
+};
+
+let recovering = false;
+let muteTimer = null;
+
+function watchMicTrack(track) {
+  if (!track) return;
+
+  track.addEventListener("ended", () => {
+    if (micStream) recoverMic();
+  });
+
+  track.addEventListener("mute", () => {
+    if (isMuted || !micStream) return;
+
+    callNote.textContent = "Your microphone went quiet — checking…";
+
+    clearTimeout(muteTimer);
+    muteTimer = setTimeout(() => {
+      const current = micStream?.getAudioTracks()[0];
+      if (current && current.muted) recoverMic();
+    }, 3000);
+  });
+
+  track.addEventListener("unmute", () => {
+    clearTimeout(muteTimer);
+    if (!isMuted && micStream && !recovering) {
+      callNote.textContent = "You're live. Anyone else who joins can hear you.";
+    }
+  });
+}
+
+async function recoverMic() {
+  if (recovering || !micStream) return;
+  recovering = true;
+
+  callNote.textContent =
+    "Something took your microphone — trying to get it back. Games often do this.";
+
+  for (let attempt = 0; attempt < 24; attempt++) {
+    if (!micStream) break;
+
+    try {
+      const fresh = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+      const track = fresh.getAudioTracks()[0];
+
+      if (track && track.readyState === "live" && !track.muted) {
+        swapMicTrack(fresh, track);
+        recovering = false;
+        callNote.textContent = isMuted
+          ? "Muted — nobody can hear you."
+          : "Got your microphone back. You're live again.";
+        return;
+      }
+
+      fresh.getTracks().forEach((t) => t.stop());
+    } catch {}
+
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
+
+  recovering = false;
+  if (micStream) handleMicLost();
+}
+
+function swapMicTrack(freshStream, freshTrack) {
+  const oldTrack = micStream.getAudioTracks()[0];
+
+  peers.forEach(({ pc }) => {
+    const sender = pc.getSenders().find((s) => s.track === oldTrack);
+    if (sender) sender.replaceTrack(freshTrack).catch(() => {});
+  });
+
+  if (oldTrack) oldTrack.stop();
+
+  freshTrack.enabled = !isMuted;
+  micStream = freshStream;
+
+  stopWatchingAudio(me.id);
+  watchAudioLevel(me.id, micStream);
+  watchMicTrack(freshTrack);
+}
+
 function handleMicLost() {
   if (!micStream) return;
+
+  clearTimeout(muteTimer);
+  recovering = false;
 
   removeStreamFromPeers(micStream);
   micStream.getTracks().forEach((track) => track.stop());
