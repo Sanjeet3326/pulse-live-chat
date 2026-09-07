@@ -1,0 +1,14 @@
+node_modules/
+
+chat.db
+chat.db-journal
+chat.db-wal
+chat.db-shm
+
+uploads/
+
+.env
+.DS_Store
+Thumbs.db
+
+*.docx

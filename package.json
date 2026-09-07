@@ -1,0 +1,26 @@
+{
+  "name": "pulse-live-chat",
+  "version": "2.0.0",
+  "description": "Pulse — a real-time chat app with live voice calls and screen sharing",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "check": "node --check server.js"
+  },
+  "keywords": [
+    "chat",
+    "socket.io",
+    "webrtc",
+    "voice",
+    "screen-share"
+  ],
+  "license": "ISC",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3"
+  }
+}

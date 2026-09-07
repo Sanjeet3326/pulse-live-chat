@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pulse — live rooms</title>
+  <meta name="description" content="Pulse: join a room and chat, talk, share files and share your screen live." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/join.css" />
+  <link rel="stylesheet" href="/css/chat.css" />
+</head>
+<body>
+
+  <canvas class="bg-canvas" id="bg-canvas" aria-hidden="true"></canvas>
+  <div class="bg-wash" aria-hidden="true"></div>
+
+  <svg class="sprite" aria-hidden="true">
+    <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="2" width="6" height="11" rx="3" /><path d="M5 10a7 7 0 0 0 14 0" /><path d="M12 17v5" />
+    </symbol>
+    <symbol id="i-mic-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 5a3 3 0 0 1 6 0v5" /><path d="M15 13.5A3 3 0 0 1 9 12v-2" /><path d="M5 10a7 7 0 0 0 10.6 6" /><path d="M19 10a7 7 0 0 1-.6 2.8" /><path d="M12 17v5" /><path d="m3 2 18 20" />
+    </symbol>
+    <symbol id="i-screen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="4" width="20" height="13" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" />
+    </symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z" />
+    </symbol>
+    <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 12h14" /><path d="m12 5 7 7-7 7" />
+    </symbol>
+    <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 5v14" /><path d="m5 12 7 7 7-7" />
+    </symbol>
+    <symbol id="i-exit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><path d="m10 17-5-5 5-5" /><path d="M15 12H5" />
+    </symbol>
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="9" cy="8" r="3.2" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><path d="M17 5.5a3 3 0 0 1 0 5.6" /><path d="M18.5 20a6 6 0 0 0-3-5" />
+    </symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 5v14" /><path d="M5 12h14" />
+    </symbol>
+    <symbol id="i-sound" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 9v6h4l5 4V5L8 9H4z" /><path d="M17 9a4 4 0 0 1 0 6" />
+    </symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 11.5 12.5 20a5 5 0 0 1-7-7l8.5-8.5a3.5 3.5 0 0 1 5 5L10.5 18a2 2 0 0 1-3-3l8-8" />
+    </symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 3H3v6" /><path d="M15 21h6v-6" /><path d="M21 9V3h-6" /><path d="M3 15v6h6" />
+    </symbol>
+    <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M4 21h16" />
+    </symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" />
+    </symbol>
+    <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" />
+    </symbol>
+  </svg>
+
+
+  <section id="join-screen" class="join">
+
+    <div class="join__pitch">
+      <div class="wordmark">
+        <span class="wordmark__dot"></span>
+        <span class="wordmark__text">PULSE</span>
+      </div>
+
+      <h1 class="pitch__headline">
+        A room that<br /><em>answers back.</em>
+      </h1>
+
+      <p class="pitch__sub">
+        Type a name. Type a room. You're in. Everyone there sees your words the
+        moment you send them — then turn on your mic, drop in a file, or throw
+        your screen up on the wall.
+      </p>
+
+      <div class="eq" aria-hidden="true">
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+      </div>
+
+      <ul class="pitch__features" data-tilt>
+        <li><svg><use href="#i-chat" /></svg><div><strong>Live text &amp; files</strong><span>Instant, and saved for whoever joins later</span></div></li>
+        <li><svg><use href="#i-mic" /></svg><div><strong>Voice call</strong><span>Talk to the whole room, browser to browser</span></div></li>
+        <li><svg><use href="#i-screen" /></svg><div><strong>Screen share</strong><span>Full stage, with the chat alongside it</span></div></li>
+      </ul>
+    </div>
+
+    <div class="join__panel">
+      <form class="card" id="join-form" autocomplete="off">
+
+        <div class="tabs" role="tablist">
+          <button class="tab is-active" id="tab-join" type="button" role="tab" aria-selected="true">
+            <svg><use href="#i-send" /></svg> Join a room
+          </button>
+          <button class="tab" id="tab-create" type="button" role="tab" aria-selected="false">
+            <svg><use href="#i-plus" /></svg> Create a room
+          </button>
+        </div>
+
+        <label class="field">
+          <span class="field__label">Your name</span>
+          <input id="username-input" class="field__input" type="text" maxlength="20" placeholder="e.g. Sanjeet" required />
+        </label>
+
+        <div id="panel-join">
+          <label class="field">
+            <span class="field__label">Room code</span>
+            <input id="code-input" class="field__input field__input--code" type="text" maxlength="20" placeholder="e.g. K7N-4PQ" />
+          </label>
+
+          <label class="field" id="password-field" hidden>
+            <span class="field__label"><svg class="field__lock"><use href="#i-lock" /></svg> Room password</span>
+            <input id="join-password-input" class="field__input" type="password" maxlength="64" placeholder="This room is locked" />
+          </label>
+
+          <div class="live-rooms" id="live-rooms" hidden>
+            <p class="live-rooms__label"><span class="pulse-dot"></span> Live right now</p>
+            <div class="live-rooms__list" id="live-rooms-list"></div>
+          </div>
+        </div>
+
+        <div id="panel-create" hidden>
+          <label class="field">
+            <span class="field__label">Room name</span>
+            <input id="room-name-input" class="field__input" type="text" maxlength="30" placeholder="e.g. Monday Standup" />
+          </label>
+
+          <label class="field">
+            <span class="field__label">Room code <span class="field__optional">optional</span></span>
+            <input id="custom-code-input" class="field__input field__input--code" type="text" maxlength="20" placeholder="Leave blank for a random code" />
+          </label>
+
+          <label class="field">
+            <span class="field__label"><svg class="field__lock"><use href="#i-lock" /></svg> Password <span class="field__optional">optional</span></span>
+            <input id="create-password-input" class="field__input" type="password" maxlength="64" placeholder="Leave blank for an open room" />
+          </label>
+        </div>
+
+        <p class="card__error" id="join-error" role="alert" hidden></p>
+
+        <button class="btn btn--primary btn--block" id="submit-btn" type="submit">
+          <span id="submit-btn-text">Join room</span>
+          <svg><use href="#i-send" /></svg>
+        </button>
+
+              </form>
+    </div>
+  </section>
+
+
+  <section id="chat-screen" class="app" hidden>
+
+    <header class="topbar">
+      <div class="topbar__left">
+        <button class="icon-btn topbar__menu" id="sidebar-toggle" type="button" aria-label="Show people">
+          <svg><use href="#i-users" /></svg>
+        </button>
+        <div class="wordmark wordmark--small">
+          <span class="wordmark__dot"></span>
+          <span class="wordmark__text">PULSE</span>
+        </div>
+        <div class="topbar__room">
+          <span class="topbar__hash">#</span><span id="room-name">Room</span>
+          <span class="lock-badge" id="lock-badge" hidden title="This room needs a password">
+            <svg><use href="#i-lock" /></svg>
+          </span>
+        </div>
+
+        <button class="code-chip" id="code-chip" type="button" title="Copy the invite link">
+          <span class="code-chip__label">CODE</span>
+          <span class="code-chip__value" id="room-code">—</span>
+          <span class="code-chip__hint" id="code-chip-hint">copy</span>
+        </button>
+      </div>
+
+      <div class="topbar__right">
+        <span class="chip chip--live"><span class="pulse-dot"></span><span id="online-count">1 here</span></span>
+        <button class="btn btn--ghost" id="leave-btn" type="button">
+          <svg><use href="#i-exit" /></svg><span>Leave</span>
+        </button>
+      </div>
+    </header>
+
+    <aside class="sidebar" id="sidebar">
+      <p class="sidebar__label">In this room</p>
+      <ul class="members" id="member-list"></ul>
+
+      <div class="callbox">
+        <p class="callbox__label">Live audio &amp; screen</p>
+
+        <button class="btn btn--call" id="mic-btn" type="button">
+          <svg><use href="#i-mic" /></svg><span id="mic-btn-text">Join voice call</span>
+        </button>
+
+        <button class="btn btn--call" id="mute-btn" type="button" hidden>
+          <svg><use href="#i-mic-off" /></svg><span id="mute-btn-text">Mute me</span>
+        </button>
+
+        <button class="btn btn--call" id="screen-btn" type="button">
+          <svg><use href="#i-screen" /></svg><span id="screen-btn-text">Share my screen</span>
+        </button>
+
+        <p class="callbox__note" id="call-note"></p>
+      </div>
+    </aside>
+
+    <section class="stage" id="stage" hidden>
+      <div class="stage__bar">
+        <span class="stage__title"><span class="pulse-dot pulse-dot--hot"></span> <span id="stage-title-text">On the wall</span></span>
+        <div class="stage__actions">
+          <button class="icon-btn icon-btn--sm" id="stage-fullscreen" type="button" title="Fullscreen">
+            <svg><use href="#i-expand" /></svg>
+          </button>
+        </div>
+      </div>
+      <div class="stage__tiles" id="stage-tiles"></div>
+    </section>
+
+    <main class="main" id="main">
+      <div class="messages" id="messages"></div>
+
+      <button class="jump" id="jump-btn" type="button" hidden>
+        <svg><use href="#i-down" /></svg> New messages
+      </button>
+
+      <p class="typing" id="typing-indicator"></p>
+      <p class="upload-status" id="upload-status"></p>
+
+      <form class="composer" id="composer" autocomplete="off">
+        <button class="composer__attach" id="attach-btn" type="button" aria-label="Attach a file" title="Attach a file">
+          <svg><use href="#i-clip" /></svg>
+        </button>
+        <input type="file" id="file-input" multiple hidden />
+
+        <textarea id="message-input" class="composer__input" rows="1" maxlength="500"
+                  placeholder="Say something…"></textarea>
+
+        <div class="composer__side">
+          <span class="composer__count" id="char-count">0/500</span>
+          <button class="btn btn--primary btn--send" id="send-btn" type="submit" aria-label="Send">
+            <svg><use href="#i-send" /></svg>
+          </button>
+        </div>
+      </form>
+
+      <div class="dropzone" id="dropzone" hidden>
+        <div class="dropzone__inner">
+          <svg><use href="#i-download" /></svg>
+          <strong>Drop to share</strong>
+          <span>Images, video, audio and documents up to 10 MB</span>
+        </div>
+      </div>
+    </main>
+
+    <div id="audio-container" hidden></div>
+
+    <button class="sound-unlock" id="sound-unlock" type="button" hidden>
+      <svg><use href="#i-sound" /></svg> Click to enable call audio
+    </button>
+  </section>
+
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

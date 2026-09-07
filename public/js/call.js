@@ -1,0 +1,471 @@
+import { socket } from "./socket.js";
+import { $, colorFor } from "./ui.js";
+
+const micBtn = $("mic-btn");
+const micBtnText = $("mic-btn-text");
+const muteBtn = $("mute-btn");
+const muteBtnText = $("mute-btn-text");
+const screenBtn = $("screen-btn");
+const screenBtnText = $("screen-btn-text");
+const callNote = $("call-note");
+const stage = $("stage");
+const stageTiles = $("stage-tiles");
+const stageTitleText = $("stage-title-text");
+const stageFullscreen = $("stage-fullscreen");
+const appEl = $("chat-screen");
+const audioContainer = $("audio-container");
+const soundUnlock = $("sound-unlock");
+
+let me = null;
+
+const peers = new Map();
+const names = new Map();
+
+let micStream = null;
+let screenStream = null;
+let isMuted = false;
+
+const RTC_CONFIG = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+  ],
+};
+
+export function start(identity) {
+  me = identity;
+  checkBrowserSupport();
+}
+
+function checkBrowserSupport() {
+  if (navigator.mediaDevices?.getUserMedia) {
+    callNote.textContent = "";
+    return;
+  }
+
+  micBtn.disabled = true;
+  screenBtn.disabled = true;
+  micBtn.style.opacity = screenBtn.style.opacity = "0.5";
+  callNote.textContent =
+    "Voice and screen sharing need a secure address. They work on localhost and on any https:// site, but not over a plain network IP. Text chat and files are unaffected.";
+}
+
+socket.on("room_members", (members) => {
+  if (!me) return;
+
+  const presentIds = new Set();
+
+  members.forEach((member) => {
+    names.set(member.id, member.username);
+    presentIds.add(member.id);
+    if (member.id !== me.id) ensurePeer(member.id);
+  });
+
+  for (const id of peers.keys()) {
+    if (!presentIds.has(id)) closePeer(id);
+  }
+
+  refreshTileLabels();
+});
+
+function ensurePeer(remoteId) {
+  const existing = peers.get(remoteId);
+  if (existing) return existing;
+
+  const pc = new RTCPeerConnection(RTC_CONFIG);
+  const peer = { pc, makingOffer: false, ignoreOffer: false };
+  peers.set(remoteId, peer);
+
+  if (micStream) addStreamToPeer(pc, micStream);
+  if (screenStream) addStreamToPeer(pc, screenStream);
+
+  pc.onnegotiationneeded = async () => {
+    try {
+      peer.makingOffer = true;
+      await pc.setLocalDescription();
+      socket.emit("webrtc_signal", {
+        to: remoteId,
+        description: pc.localDescription,
+      });
+    } catch (err) {
+      console.error("[call] could not create offer:", err);
+    } finally {
+      peer.makingOffer = false;
+    }
+  };
+
+  pc.onicecandidate = ({ candidate }) => {
+    if (candidate) socket.emit("webrtc_signal", { to: remoteId, candidate });
+  };
+
+  pc.ontrack = (event) => {
+    const [stream] = event.streams;
+
+    if (event.track.kind === "audio") {
+      playRemoteAudio(remoteId, stream);
+      watchAudioLevel(remoteId, stream);
+    } else {
+      showTile(remoteId, stream, names.get(remoteId) || "Someone");
+      event.track.addEventListener("ended", () => removeTile(remoteId));
+      event.track.addEventListener("mute", () => removeTile(remoteId));
+    }
+  };
+
+  return peer;
+}
+
+function closePeer(remoteId) {
+  const peer = peers.get(remoteId);
+  if (peer) {
+    peer.pc.close();
+    peers.delete(remoteId);
+  }
+
+  document.getElementById("audio-" + remoteId)?.remove();
+  stopWatchingAudio(remoteId);
+  removeTile(remoteId);
+  names.delete(remoteId);
+}
+
+function addStreamToPeer(pc, stream) {
+  stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+}
+
+function removeStreamFromPeers(stream) {
+  peers.forEach(({ pc }) => {
+    pc.getSenders().forEach((sender) => {
+      if (sender.track && stream.getTracks().includes(sender.track)) {
+        pc.removeTrack(sender);
+      }
+    });
+  });
+}
+
+socket.on("webrtc_signal", async ({ from, description, candidate }) => {
+  if (!me) return;
+
+  const peer = ensurePeer(from);
+  const { pc } = peer;
+  const polite = me.id > from;
+
+  try {
+    if (description) {
+      const collision =
+        description.type === "offer" &&
+        (peer.makingOffer || pc.signalingState !== "stable");
+
+      peer.ignoreOffer = !polite && collision;
+      if (peer.ignoreOffer) return;
+
+      await pc.setRemoteDescription(description);
+
+      if (description.type === "offer") {
+        await pc.setLocalDescription();
+        socket.emit("webrtc_signal", {
+          to: from,
+          description: pc.localDescription,
+        });
+      }
+    } else if (candidate) {
+      try {
+        await pc.addIceCandidate(candidate);
+      } catch (err) {
+        if (!peer.ignoreOffer) console.warn("[call] ICE candidate:", err);
+      }
+    }
+  } catch (err) {
+    console.error("[call] signalling problem:", err);
+  }
+});
+
+socket.on("screen_share_stopped", (remoteId) => removeTile(remoteId));
+
+micBtn.addEventListener("click", () => (micStream ? leaveVoice() : joinVoice()));
+
+async function joinVoice() {
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+  } catch (err) {
+    callNote.textContent =
+      "Couldn't use your microphone. Check that you allowed access, and that no other app is holding it.";
+    console.error("[call] microphone:", err);
+    return;
+  }
+
+  peers.forEach(({ pc }) => addStreamToPeer(pc, micStream));
+
+  socket.emit("call_state", { micOn: true });
+  watchAudioLevel(me.id, micStream);
+
+  micBtn.classList.add("is-on");
+  micBtnText.textContent = "Leave voice call";
+  muteBtn.hidden = false;
+  callNote.textContent = "You're live. Anyone else who joins can hear you.";
+}
+
+function leaveVoice() {
+  removeStreamFromPeers(micStream);
+  micStream.getTracks().forEach((track) => track.stop());
+  micStream = null;
+  isMuted = false;
+
+  stopWatchingAudio(me.id);
+  socket.emit("call_state", { micOn: false });
+
+  micBtn.classList.remove("is-on");
+  micBtnText.textContent = "Join voice call";
+  muteBtn.hidden = true;
+  muteBtn.classList.remove("is-on");
+  muteBtnText.textContent = "Mute me";
+  callNote.textContent = "";
+}
+
+muteBtn.addEventListener("click", () => {
+  if (!micStream) return;
+
+  isMuted = !isMuted;
+  micStream.getAudioTracks().forEach((track) => (track.enabled = !isMuted));
+
+  muteBtn.classList.toggle("is-on", isMuted);
+  muteBtnText.textContent = isMuted ? "Unmute me" : "Mute me";
+  callNote.textContent = isMuted
+    ? "Muted — nobody can hear you."
+    : "You're live. Anyone else who joins can hear you.";
+});
+
+screenBtn.addEventListener("click", () =>
+  screenStream ? stopSharing() : startSharing()
+);
+
+async function startSharing() {
+  try {
+    screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: 15 },
+      audio: false,
+    });
+  } catch (err) {
+    return;
+  }
+
+  peers.forEach(({ pc }) => addStreamToPeer(pc, screenStream));
+  socket.emit("call_state", { sharing: true });
+
+  showTile(me.id, screenStream, "You", true);
+
+  screenBtn.classList.add("is-on");
+  screenBtnText.textContent = "Stop sharing";
+
+  screenStream.getVideoTracks()[0].addEventListener("ended", stopSharing);
+}
+
+function stopSharing() {
+  if (!screenStream) return;
+
+  removeStreamFromPeers(screenStream);
+  screenStream.getTracks().forEach((track) => track.stop());
+  screenStream = null;
+
+  socket.emit("call_state", { sharing: false });
+  removeTile(me.id);
+
+  screenBtn.classList.remove("is-on");
+  screenBtnText.textContent = "Share my screen";
+}
+
+function showTile(id, stream, label, isLocal = false) {
+  let tile = document.getElementById("tile-" + id);
+
+  if (!tile) {
+    tile = document.createElement("div");
+    tile.className = "tile";
+    tile.id = "tile-" + id;
+    tile.dataset.local = String(isLocal);
+
+    const video = document.createElement("video");
+    video.autoplay = true;
+    video.playsInline = true;
+    video.muted = true;
+
+    const tag = document.createElement("div");
+    tag.className = "tile__label";
+
+    const dot = document.createElement("span");
+    dot.className = "pulse-dot";
+    dot.style.background = colorFor(label);
+
+    const text = document.createElement("span");
+    text.className = "tile__name";
+
+    tag.append(dot, text);
+
+    const expand = document.createElement("button");
+    expand.type = "button";
+    expand.className = "tile__expand";
+    expand.title = "Fullscreen";
+    const expandIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const expandUse = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    expandUse.setAttribute("href", "#i-expand");
+    expandIcon.appendChild(expandUse);
+    expand.appendChild(expandIcon);
+    expand.addEventListener("click", (event) => {
+      event.stopPropagation();
+      requestFullscreen(tile);
+    });
+
+    tile.append(video, tag, expand);
+    tile.addEventListener("click", () => {
+      tile.classList.toggle("is-focused");
+      updateStageLayout();
+    });
+
+    stageTiles.appendChild(tile);
+  }
+
+  tile.dataset.label = label;
+  tile.dataset.local = String(isLocal);
+  tile.querySelector("video").srcObject = stream;
+
+  refreshTileLabels();
+  updateStageLayout();
+}
+
+function removeTile(id) {
+  document.getElementById("tile-" + id)?.remove();
+  updateStageLayout();
+}
+
+function refreshTileLabels() {
+  stageTiles.querySelectorAll(".tile").forEach((tile) => {
+    const id = tile.id.replace("tile-", "");
+    const isLocal = tile.dataset.local === "true";
+    const label = isLocal ? "You" : names.get(id) || tile.dataset.label || "Someone";
+
+    tile.dataset.label = label;
+    const nameEl = tile.querySelector(".tile__name");
+    if (nameEl) nameEl.textContent = isLocal ? "Your screen" : label;
+
+    const dot = tile.querySelector(".pulse-dot");
+    if (dot) dot.style.background = colorFor(label);
+  });
+}
+
+function updateStageLayout() {
+  const count = stageTiles.children.length;
+
+  stage.hidden = count === 0;
+  appEl.classList.toggle("has-stage", count > 0);
+  stageTiles.classList.toggle("is-multi", count > 1);
+
+  const focused = stageTiles.querySelector(".tile.is-focused");
+  stageTiles.classList.toggle("has-focus", Boolean(focused));
+
+  if (count === 0) {
+    stageTitleText.textContent = "On the wall";
+  } else if (count === 1) {
+    const only = stageTiles.querySelector(".tile");
+    stageTitleText.textContent = (only?.dataset.label || "Someone") + " is sharing";
+  } else {
+    stageTitleText.textContent = count + " screens shared";
+  }
+}
+
+function requestFullscreen(element) {
+  const target = element.querySelector("video") || element;
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+    return;
+  }
+  (target.requestFullscreen || target.webkitRequestFullscreen)?.call(target);
+}
+
+stageFullscreen.addEventListener("click", () => {
+  const focused =
+    stageTiles.querySelector(".tile.is-focused") || stageTiles.querySelector(".tile");
+  if (focused) requestFullscreen(focused);
+});
+
+function playRemoteAudio(remoteId, stream) {
+  let audio = document.getElementById("audio-" + remoteId);
+
+  if (!audio) {
+    audio = document.createElement("audio");
+    audio.id = "audio-" + remoteId;
+    audio.autoplay = true;
+    audioContainer.appendChild(audio);
+  }
+
+  audio.srcObject = stream;
+
+  audio.play().catch(() => {
+    soundUnlock.hidden = false;
+  });
+}
+
+soundUnlock.addEventListener("click", () => {
+  audioContainer.querySelectorAll("audio").forEach((el) => el.play());
+  audioContext?.resume();
+  soundUnlock.hidden = true;
+});
+
+let audioContext = null;
+const meters = new Map();
+let meterTimer = null;
+const METER_INTERVAL_MS = 100;
+
+function watchAudioLevel(id, stream) {
+  if (stream.getAudioTracks().length === 0) return;
+
+  audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+
+  const source = audioContext.createMediaStreamSource(stream);
+  const analyser = audioContext.createAnalyser();
+  analyser.fftSize = 512;
+  source.connect(analyser);
+
+  meters.set(id, {
+    analyser,
+    source,
+    samples: new Uint8Array(analyser.frequencyBinCount),
+  });
+
+  if (!meterTimer) meterTimer = setInterval(measureEveryone, METER_INTERVAL_MS);
+}
+
+function stopWatchingAudio(id) {
+  const meter = meters.get(id);
+  if (!meter) return;
+
+  meter.source.disconnect();
+  meters.delete(id);
+  document.getElementById("member-" + id)?.classList.remove("is-speaking");
+
+  if (meters.size === 0 && meterTimer) {
+    clearInterval(meterTimer);
+    meterTimer = null;
+  }
+}
+
+function measureEveryone() {
+  if (document.hidden) return;
+
+  meters.forEach(({ analyser, samples }, id) => {
+    analyser.getByteTimeDomainData(samples);
+
+    let total = 0;
+    for (let i = 0; i < samples.length; i++) {
+      const offset = samples[i] - 128;
+      total += offset * offset;
+    }
+    const loudness = Math.sqrt(total / samples.length);
+
+    document
+      .getElementById("member-" + id)
+      ?.classList.toggle("is-speaking", loudness > 4);
+  });
+}
