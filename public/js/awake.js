@@ -1,3 +1,19 @@
+const RESTART_GAP_MS = 1000;
+
+export function keepPlaying(element) {
+  clearTimeout(element.restartTimer);
+
+  const since = Date.now() - (element.restartedAt || 0);
+  const wait = Math.max(0, RESTART_GAP_MS - since);
+
+  element.restartTimer = setTimeout(() => {
+    if (!element.isConnected || !element.paused) return;
+
+    element.restartedAt = Date.now();
+    element.play().catch(() => {});
+  }, wait);
+}
+
 let wantsLock = false;
 let lock = null;
 
@@ -57,6 +73,9 @@ export function holdAudioFocus() {
     element.setAttribute("playsinline", "");
     document.body.appendChild(element);
     element.play().catch(() => {});
+    element.addEventListener("pause", () => {
+      if (holder?.element === element) keepPlaying(element);
+    });
 
     holder = { context, oscillator, element };
   } catch {
@@ -80,7 +99,15 @@ export function releaseAudioFocus() {
   context.close().catch(() => {});
 }
 
-export function showOngoingCall(roomName) {
+const SESSION_ACTIONS = ["play", "pause", "stop", "hangup"];
+
+function setAction(name, handler) {
+  try {
+    navigator.mediaSession.setActionHandler(name, handler);
+  } catch {}
+}
+
+export function showOngoingCall(roomName, { onStop, onResume }) {
   if (!("mediaSession" in navigator)) return;
 
   try {
@@ -88,13 +115,32 @@ export function showOngoingCall(roomName) {
       title: "Voice call",
       artist: roomName,
       album: "Pulse",
+      artwork: [
+        { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+        { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      ],
     });
     navigator.mediaSession.playbackState = "playing";
   } catch {}
+
+  setAction("play", () => {
+    navigator.mediaSession.playbackState = "playing";
+    onResume?.();
+  });
+
+  setAction("pause", () => {
+    navigator.mediaSession.playbackState = "playing";
+    onResume?.();
+  });
+
+  setAction("stop", () => onStop?.());
+  setAction("hangup", () => onStop?.());
 }
 
 export function clearOngoingCall() {
   if (!("mediaSession" in navigator)) return;
+
+  SESSION_ACTIONS.forEach((name) => setAction(name, null));
 
   try {
     navigator.mediaSession.metadata = null;
@@ -107,5 +153,5 @@ document.addEventListener("visibilitychange", () => {
 
   requestLock();
   holder?.context.resume().catch(() => {});
-  if (holder?.element.paused) holder.element.play().catch(() => {});
+  if (holder?.element.paused) keepPlaying(holder.element);
 });

@@ -117,7 +117,17 @@ socket.on("disconnect", (reason) => {
 });
 
 socket.io.on("reconnect_attempt", (attempt) => {
-  setStatus("connecting", `Reconnecting… (attempt ${attempt})`);
+  setStatus(
+    "connecting",
+    attempt > 3 ? `Reconnecting… (attempt ${attempt})` : "Reconnecting…"
+  );
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden || socket.connected) return;
+
+  setStatus("connecting", "Reconnecting…");
+  socket.connect();
 });
 
 

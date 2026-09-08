@@ -7,6 +7,7 @@ import {
   releaseAudioFocus,
   showOngoingCall,
   clearOngoingCall,
+  keepPlaying,
 } from "./awake.js";
 
 const micBtn = $("mic-btn");
@@ -281,7 +282,10 @@ async function joinVoice() {
   callNote.textContent = "You're live. Anyone else who joins can hear you.";
 
   holdAudioFocus();
-  showOngoingCall($("room-name").textContent);
+  showOngoingCall($("room-name").textContent, {
+    onStop: leaveVoice,
+    onResume: resumeAfterBackground,
+  });
 
   keepScreenAwake().then((held) => {
     if (held && micStream && !isMuted && !recovering) {
@@ -901,8 +905,10 @@ function playRemoteAudio(remoteId, stream) {
     audio = document.createElement("audio");
     audio.id = "audio-" + stream.id;
     audio.autoplay = true;
+    audio.setAttribute("playsinline", "");
     audio.dataset.peer = remoteId;
     audio.dataset.kind = stream.getVideoTracks().length > 0 ? "screen" : "mic";
+    audio.addEventListener("pause", () => keepPlaying(audio));
     audioContainer.appendChild(audio);
   }
 
