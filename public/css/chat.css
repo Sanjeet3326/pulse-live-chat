@@ -822,6 +822,36 @@
 .member__eye:hover { background: var(--glass-2); color: var(--text); }
 .member__eye.is-on { color: var(--hot); background: var(--hot-soft); }
 
+.callbox__log {
+  margin-top: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px dashed var(--glass-edge);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  letter-spacing: .01em;
+  cursor: pointer;
+  transition: color .18s, border-color .18s;
+}
+.callbox__log:hover { color: var(--text); border-color: var(--gold); }
+
+.callbox__log-text {
+  margin-top: 8px;
+  width: 100%;
+  height: 120px;
+  padding: 8px;
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+  background: var(--glass-1);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  resize: vertical;
+}
+
 .member__ask {
   display: grid;
   place-items: center;

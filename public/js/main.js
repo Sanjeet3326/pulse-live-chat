@@ -5,6 +5,7 @@ import * as call from "./call.js";
 import * as session from "./session.js";
 import { startBackground } from "./background.js";
 import { initTilt } from "./tilt.js";
+import { record, snapshot } from "./diagnostics.js";
 
 const background = startBackground($("bg-canvas"));
 initTilt();
@@ -103,6 +104,8 @@ if (codeFromLink) {
 usernameInput.focus();
 
 socket.on("connect", () => {
+  record("socket connected", socket.io.engine.transport.name);
+
   if (activeSession) {
     setStatus("connecting", "Rejoining…");
     socket.emit("join_room", activeSession);
@@ -112,11 +115,13 @@ socket.on("connect", () => {
 });
 
 socket.on("disconnect", (reason) => {
+  record("socket disconnected", reason);
   if (reason === "io client disconnect") return;
   setStatus("offline", "Connection lost — reconnecting…");
 });
 
 socket.io.on("reconnect_attempt", (attempt) => {
+  record("socket reconnect attempt", attempt);
   setStatus(
     "connecting",
     attempt > 3 ? `Reconnecting… (attempt ${attempt})` : "Reconnecting…"
@@ -376,6 +381,43 @@ quickScreenText.dataset.on = "Stop";
 
 mirror(micBtn, quickMic, quickMicText);
 mirror(screenBtn, quickScreen, quickScreenText);
+
+const copyLogBtn = $("copy-log");
+
+copyLogBtn.addEventListener("click", async () => {
+  const text = snapshot();
+
+  try {
+    await navigator.clipboard.writeText(text);
+    flashLog("Copied — paste it to whoever is helping");
+  } catch {
+    flashLog("Couldn't copy — the log is in the box below");
+    showLogFallback(text);
+  }
+});
+
+function flashLog(message) {
+  copyLogBtn.textContent = message;
+
+  setTimeout(() => {
+    copyLogBtn.textContent = "Copy connection log";
+  }, 3000);
+}
+
+function showLogFallback(text) {
+  let box = $("log-fallback");
+
+  if (!box) {
+    box = document.createElement("textarea");
+    box.id = "log-fallback";
+    box.className = "callbox__log-text";
+    box.readOnly = true;
+    copyLogBtn.after(box);
+  }
+
+  box.value = text;
+  box.select();
+}
 
 const installBtn = $("install-btn");
 let installPrompt = null;

@@ -8,7 +8,10 @@ import {
   showOngoingCall,
   clearOngoingCall,
   keepPlaying,
+  holdActivity,
+  releaseActivityLock,
 } from "./awake.js";
+import { record } from "./diagnostics.js";
 
 const micBtn = $("mic-btn");
 const micBtnText = $("mic-btn-text");
@@ -122,6 +125,7 @@ function ensurePeer(remoteId) {
 
   pc.oniceconnectionstatechange = () => {
     const state = pc.iceConnectionState;
+    record("ice " + state, names.get(remoteId) || remoteId);
 
     if (state === "failed" && peer.restarts < 2) {
       peer.restarts++;
@@ -281,7 +285,9 @@ async function joinVoice() {
   muteBtn.hidden = false;
   callNote.textContent = "You're live. Anyone else who joins can hear you.";
 
+  record("joined voice call");
   holdAudioFocus();
+  holdActivity();
   showOngoingCall($("room-name").textContent, {
     onStop: leaveVoice,
     onResume: resumeAfterBackground,
@@ -321,7 +327,9 @@ function leaveVoice() {
 function releaseCallHolds() {
   if (micStream || screenStream) return;
 
+  record("left voice call");
   releaseAudioFocus();
+  releaseActivityLock();
   clearOngoingCall();
   letScreenSleep();
 }
@@ -341,10 +349,12 @@ function watchMicTrack(track) {
   if (!track) return;
 
   track.addEventListener("ended", () => {
+    record("mic track ended", document.hidden ? "while hidden" : "while visible");
     if (micStream && !document.hidden) recoverMic();
   });
 
   track.addEventListener("mute", () => {
+    record("mic track muted", document.hidden ? "while hidden" : "while visible");
     if (isMuted || !micStream || document.hidden) return;
 
     callNote.textContent = "Your microphone went quiet — checking…";
@@ -357,6 +367,7 @@ function watchMicTrack(track) {
   });
 
   track.addEventListener("unmute", () => {
+    record("mic track unmuted");
     clearTimeout(muteTimer);
     if (!isMuted && micStream && !recovering) {
       callNote.textContent = "You're live. Anyone else who joins can hear you.";
@@ -853,6 +864,8 @@ stageFullscreen.addEventListener("click", () => {
 function resumeAfterBackground() {
   if (!me || document.hidden) return;
 
+  record("resuming", "socket " + (socket.connected ? "up" : "down"));
+
   if (!socket.connected) socket.connect();
 
   audioContext?.resume().catch(() => {});
@@ -885,6 +898,7 @@ function resumeAfterBackground() {
 }
 
 document.addEventListener("visibilitychange", resumeAfterBackground);
+document.addEventListener("resume", resumeAfterBackground);
 window.addEventListener("pageshow", resumeAfterBackground);
 window.addEventListener("focus", resumeAfterBackground);
 
@@ -908,7 +922,10 @@ function playRemoteAudio(remoteId, stream) {
     audio.setAttribute("playsinline", "");
     audio.dataset.peer = remoteId;
     audio.dataset.kind = stream.getVideoTracks().length > 0 ? "screen" : "mic";
-    audio.addEventListener("pause", () => keepPlaying(audio));
+    audio.addEventListener("pause", () => {
+      record("remote audio paused by the browser");
+      keepPlaying(audio);
+    });
     audioContainer.appendChild(audio);
   }
 

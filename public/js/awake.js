@@ -1,3 +1,5 @@
+import { record } from "./diagnostics.js";
+
 const RESTART_GAP_MS = 1000;
 
 export function keepPlaying(element) {
@@ -37,12 +39,41 @@ async function requestLock() {
 
   try {
     lock = await navigator.wakeLock.request("screen");
+    record("screen wake lock held");
+
     lock.addEventListener("release", () => {
       lock = null;
+      record("screen wake lock released");
     });
-  } catch {
+  } catch (err) {
     lock = null;
+    record("screen wake lock refused", err.name);
   }
+}
+
+let releaseActivity = null;
+
+export function holdActivity() {
+  if (releaseActivity || !navigator.locks) return;
+
+  navigator.locks
+    .request("pulse-call", () => {
+      record("activity lock held");
+      return new Promise((resolve) => {
+        releaseActivity = resolve;
+      });
+    })
+    .catch(() => {
+      releaseActivity = null;
+    });
+}
+
+export function releaseActivityLock() {
+  if (!releaseActivity) return;
+
+  releaseActivity();
+  releaseActivity = null;
+  record("activity lock released");
 }
 
 let holder = null;
