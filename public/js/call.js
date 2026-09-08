@@ -1,5 +1,13 @@
 import { socket } from "./socket.js";
 import { $, colorFor } from "./ui.js";
+import {
+  keepScreenAwake,
+  letScreenSleep,
+  holdAudioFocus,
+  releaseAudioFocus,
+  showOngoingCall,
+  clearOngoingCall,
+} from "./awake.js";
 
 const micBtn = $("mic-btn");
 const micBtnText = $("mic-btn-text");
@@ -61,6 +69,9 @@ export function start(identity) {
 
   checkBrowserSupport();
   showReachNote();
+
+  if (micStream) socket.emit("call_state", { micOn: true });
+  if (screenStream) socket.emit("call_state", { sharing: true });
 }
 
 function setCallNote(text) {
@@ -268,6 +279,16 @@ async function joinVoice() {
   micBtnText.textContent = "Leave voice call";
   muteBtn.hidden = false;
   callNote.textContent = "You're live. Anyone else who joins can hear you.";
+
+  holdAudioFocus();
+  showOngoingCall($("room-name").textContent);
+
+  keepScreenAwake().then((held) => {
+    if (held && micStream && !isMuted && !recovering) {
+      callNote.textContent =
+        "You're live. Your screen stays on so the call keeps running.";
+    }
+  });
 }
 
 function leaveVoice() {
@@ -289,7 +310,16 @@ function leaveVoice() {
   muteBtnText.textContent = "Mute me";
   callNote.textContent = "";
 
+  releaseCallHolds();
   nudgeToJoinVoice();
+}
+
+function releaseCallHolds() {
+  if (micStream || screenStream) return;
+
+  releaseAudioFocus();
+  clearOngoingCall();
+  letScreenSleep();
 }
 
 const MIC_CONSTRAINTS = {
@@ -307,18 +337,18 @@ function watchMicTrack(track) {
   if (!track) return;
 
   track.addEventListener("ended", () => {
-    if (micStream) recoverMic();
+    if (micStream && !document.hidden) recoverMic();
   });
 
   track.addEventListener("mute", () => {
-    if (isMuted || !micStream) return;
+    if (isMuted || !micStream || document.hidden) return;
 
     callNote.textContent = "Your microphone went quiet — checking…";
 
     clearTimeout(muteTimer);
     muteTimer = setTimeout(() => {
       const current = micStream?.getAudioTracks()[0];
-      if (current && current.muted) recoverMic();
+      if (current && current.muted && !document.hidden) recoverMic();
     }, 3000);
   });
 
@@ -339,6 +369,12 @@ async function recoverMic() {
 
   for (let attempt = 0; attempt < 720; attempt++) {
     if (!micStream) break;
+
+    if (document.hidden) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      attempt--;
+      continue;
+    }
 
     try {
       const fresh = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
@@ -365,7 +401,7 @@ async function recoverMic() {
   }
 
   recovering = false;
-  if (micStream) handleMicLost();
+  if (micStream && !document.hidden) handleMicLost();
 }
 
 function swapMicTrack(freshStream, freshTrack) {
@@ -409,6 +445,8 @@ function handleMicLost() {
   callNote.textContent =
     "Another app took your microphone, so you left the call. Close it and join again.";
   micBtn.classList.add("is-nudge");
+
+  releaseCallHolds();
 }
 
 muteBtn.addEventListener("click", () => {
@@ -569,6 +607,7 @@ async function beginSharing(chosen) {
   screenBtnText.textContent = "Stop sharing";
 
   screenStream.getVideoTracks()[0].addEventListener("ended", stopSharing);
+  keepScreenAwake();
 
   return true;
 }
@@ -587,6 +626,8 @@ function stopSharing() {
 
   screenBtn.classList.remove("is-on");
   screenBtnText.textContent = "Share my screen";
+
+  releaseCallHolds();
 }
 
 const askSheet = $("ask-sheet");
@@ -804,6 +845,44 @@ stageFullscreen.addEventListener("click", () => {
     stageTiles.querySelector(".tile.is-focused") || stageTiles.querySelector(".tile");
   if (focused) requestFullscreen(focused);
 });
+
+function resumeAfterBackground() {
+  if (!me || document.hidden) return;
+
+  if (!socket.connected) socket.connect();
+
+  audioContext?.resume().catch(() => {});
+
+  audioContainer.querySelectorAll("audio").forEach((element) => {
+    if (element.paused) {
+      element.play().catch(() => {
+        soundUnlock.hidden = false;
+      });
+    }
+  });
+
+  peers.forEach((peer) => {
+    const state = peer.pc.iceConnectionState;
+
+    if (state === "failed" || state === "disconnected") {
+      peer.restarts = 0;
+      try {
+        peer.pc.restartIce();
+      } catch {}
+    }
+  });
+
+  if (!micStream) return;
+
+  const track = micStream.getAudioTracks()[0];
+  const dead = !track || track.readyState !== "live" || track.muted;
+
+  if (dead && !recovering) recoverMic();
+}
+
+document.addEventListener("visibilitychange", resumeAfterBackground);
+window.addEventListener("pageshow", resumeAfterBackground);
+window.addEventListener("focus", resumeAfterBackground);
 
 function considerForSpeaking(remoteId, stream) {
   if (stream.getVideoTracks().length > 0) {

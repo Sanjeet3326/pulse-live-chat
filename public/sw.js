@@ -1,4 +1,4 @@
-const CACHE = "pulse-shell-v1";
+const CACHE = "pulse-shell-v2";
 
 const SHELL = [
   "/",
@@ -14,6 +14,7 @@ const SHELL = [
   "/js/session.js",
   "/js/background.js",
   "/js/tilt.js",
+  "/js/awake.js",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
 ];
