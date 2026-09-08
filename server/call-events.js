@@ -25,6 +25,44 @@ function register(io, socket, session) {
       socket.to(session.room).emit("screen_share_stopped", socket.id);
     }
   });
+
+  socket.on("request_screen", ({ to }) => {
+    if (!session.room || !to || to === socket.id) return;
+
+    const target = rooms.getMembers(session.room).find((m) => m.id === to);
+    if (!target) return;
+
+    io.to(to).emit("screen_request", {
+      from: socket.id,
+      username: session.username,
+    });
+  });
+
+  socket.on("screen_request_reply", ({ to, allowed }) => {
+    if (!session.room || !to) return;
+
+    const asker = rooms.getMembers(session.room).find((m) => m.id === to);
+    if (!asker) return;
+
+    io.to(to).emit("screen_request_reply", {
+      from: socket.id,
+      username: session.username,
+      allowed: Boolean(allowed),
+    });
+  });
+
+  socket.on("screen_access", ({ to, allowed }) => {
+    if (!session.room || !to) return;
+
+    const target = rooms.getMembers(session.room).find((m) => m.id === to);
+    if (!target) return;
+
+    io.to(to).emit("screen_access", {
+      from: socket.id,
+      username: session.username,
+      allowed: Boolean(allowed),
+    });
+  });
 }
 
 module.exports = { register };

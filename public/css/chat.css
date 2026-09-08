@@ -822,6 +822,27 @@
 .member__eye:hover { background: var(--glass-2); color: var(--text); }
 .member__eye.is-on { color: var(--hot); background: var(--hot-soft); }
 
+.member__ask {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: background .18s, color .18s;
+}
+.member__ask svg { width: 15px; height: 15px; }
+.member__ask:hover { background: var(--glass-2); color: var(--gold); }
+.member__ask.is-asked {
+  color: var(--gold);
+  background: var(--gold-soft);
+  cursor: default;
+}
+
 .sheet {
   position: fixed;
   inset: 0;
@@ -947,7 +968,7 @@
   .msg__text { font-size: 15px; }
 
   .member { padding: 11px 10px; }
-  .member__kick, .member__eye { opacity: 1; width: 34px; height: 34px; }
+  .member__kick, .member__eye, .member__ask { opacity: 1; width: 34px; height: 34px; }
 
   .stage__tiles { padding: 8px; }
   .tile__expand { opacity: 1; width: 36px; height: 36px; }

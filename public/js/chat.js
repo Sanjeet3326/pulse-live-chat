@@ -500,6 +500,25 @@ function renderMembers(members) {
 
     li.append(avatarWrap, body, badges);
 
+    if (member.id !== me?.id && !canSeeTheirScreen) {
+      const ask = document.createElement("button");
+      ask.type = "button";
+      ask.className = "member__ask";
+      ask.title = member.sharing
+        ? `Ask ${member.username} to let you see their screen`
+        : `Ask ${member.username} to share their screen`;
+      ask.setAttribute("aria-label", ask.title);
+      ask.appendChild(iconEl("i-ask"));
+
+      ask.addEventListener("click", () => {
+        call.askForScreen(member.id);
+        ask.classList.add("is-asked");
+        ask.disabled = true;
+      });
+
+      li.appendChild(ask);
+    }
+
     if (call.isSharing() && member.id !== me?.id) {
       const allowed = call.isViewer(member.id);
 

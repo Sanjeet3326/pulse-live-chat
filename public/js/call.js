@@ -187,6 +187,7 @@ function closePeer(remoteId) {
     .forEach((el) => el.remove());
   stopWatchingAudio(remoteId);
   removeTile(remoteId);
+  forgetAsksFrom(remoteId);
   names.delete(remoteId);
 }
 
@@ -436,6 +437,17 @@ export function isViewer(id) {
   return screenViewers.has(id);
 }
 
+function grantViewer(id) {
+  if (!screenStream || id === me?.id || screenViewers.has(id)) return;
+
+  screenViewers.add(id);
+
+  const peer = peers.get(id);
+  if (peer) addStreamToPeer(peer.pc, screenStream);
+
+  document.dispatchEvent(new CustomEvent("pulse:viewers-changed"));
+}
+
 export function toggleViewer(id) {
   if (!screenStream || id === me?.id) return;
 
@@ -532,7 +544,7 @@ async function beginSharing(chosen) {
       },
     });
   } catch (err) {
-    return;
+    return false;
   }
 
   if (screenStream.getAudioTracks().length === 0) {
@@ -557,6 +569,8 @@ async function beginSharing(chosen) {
   screenBtnText.textContent = "Stop sharing";
 
   screenStream.getVideoTracks()[0].addEventListener("ended", stopSharing);
+
+  return true;
 }
 
 function stopSharing() {
@@ -573,6 +587,104 @@ function stopSharing() {
 
   screenBtn.classList.remove("is-on");
   screenBtnText.textContent = "Share my screen";
+}
+
+const askSheet = $("ask-sheet");
+const askTitle = $("ask-title");
+const askSub = $("ask-sub");
+
+const askQueue = [];
+let currentAsk = null;
+
+export function askForScreen(id) {
+  if (!id || id === me?.id) return;
+
+  socket.emit("request_screen", { to: id });
+  setCallNote(`Asked ${names.get(id) || "them"} to show you their screen.`);
+}
+
+socket.on("screen_request", ({ from, username }) => {
+  if (askQueue.some((ask) => ask.from === from) || currentAsk?.from === from) return;
+
+  askQueue.push({ from, username });
+  if (!currentAsk) showNextAsk();
+});
+
+function showNextAsk() {
+  currentAsk = askQueue.shift() || null;
+
+  if (!currentAsk) {
+    askSheet.hidden = true;
+    return;
+  }
+
+  askTitle.textContent = `${currentAsk.username} wants to see your screen`;
+  askSub.textContent = screenStream
+    ? "They'll start receiving the screen you're already sharing."
+    : "Pick the window or tab to share on the next step.";
+
+  askSheet.hidden = false;
+}
+
+function answerAsk(allowed) {
+  const ask = currentAsk;
+  currentAsk = null;
+  askSheet.hidden = true;
+
+  if (!ask) return null;
+
+  if (!allowed) {
+    socket.emit("screen_request_reply", { to: ask.from, allowed: false });
+    showNextAsk();
+    return null;
+  }
+
+  return ask;
+}
+
+$("ask-deny").addEventListener("click", () => {
+  answerAsk(false);
+});
+
+$("ask-allow").addEventListener("click", async () => {
+  const ask = answerAsk(true);
+  if (!ask) return;
+
+  if (screenStream) {
+    grantViewer(ask.from);
+    socket.emit("screen_request_reply", { to: ask.from, allowed: true });
+  } else {
+    const started = await beginSharing(new Set([ask.from]));
+    socket.emit("screen_request_reply", { to: ask.from, allowed: started });
+  }
+
+  showNextAsk();
+});
+
+socket.on("screen_request_reply", ({ username, allowed }) => {
+  setCallNote(
+    allowed
+      ? `${username} is showing you their screen.`
+      : `${username} would rather not show their screen right now.`
+  );
+});
+
+socket.on("screen_access", ({ from, username, allowed }) => {
+  if (allowed) return;
+
+  removeTile(from);
+  setCallNote(`${username} stopped showing you their screen.`);
+});
+
+function forgetAsksFrom(id) {
+  for (let i = askQueue.length - 1; i >= 0; i--) {
+    if (askQueue[i].from === id) askQueue.splice(i, 1);
+  }
+
+  if (currentAsk?.from === id) {
+    currentAsk = null;
+    showNextAsk();
+  }
 }
 
 function showTile(id, stream, label, isLocal = false) {
@@ -669,7 +781,10 @@ function updateStageLayout() {
     stageTitleText.textContent = "On the wall";
   } else if (count === 1) {
     const only = stageTiles.querySelector(".tile");
-    stageTitleText.textContent = (only?.dataset.label || "Someone") + " is sharing";
+    stageTitleText.textContent =
+      only?.dataset.local === "true"
+        ? "You're sharing your screen"
+        : (only?.dataset.label || "Someone") + " is sharing";
   } else {
     stageTitleText.textContent = count + " screens shared";
   }
